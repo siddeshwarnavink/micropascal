@@ -130,6 +130,9 @@ int clomy_dainsert (clomy_da *da, void *data, unsigned int i);
 /* Delete data at Ith position of dynamic array. */
 void clomy_dadel (clomy_da *da, unsigned int i);
 
+/* Delete data at front of the dynamic array and returns the data. */
+void *clomy_dapop (clomy_da *da);
+
 /* Get Ith element of dynamic array. */
 void *clomy_dageti (clomy_da *da, unsigned int i);
 
@@ -271,6 +274,7 @@ void clomy_sbfold (clomy_stringbuilder *sb);
 #define daappend clomy_daappend
 #define dainsert clomy_dainsert
 #define dadel clomy_dadel
+#define dapop clomy_dapop
 #define dafold clomy_dafold
 
 #define ht clomy_ht
@@ -659,6 +663,21 @@ clomy_dadel (clomy_da *da, unsigned int i)
   memmove (pos, pos + da->data_size,
            da->size * da->data_size - i * da->data_size);
   --da->size;
+}
+
+void *
+clomy_dapop (clomy_da *da)
+{
+  void *data;
+  if (da->ar)
+    data = aralloc (da->ar, da->data_size);
+  else
+    data = malloc (da->data_size);
+
+  memcpy (data, clomy_dageti (da, 0), da->data_size);
+  clomy_dadel (da, 0);
+
+  return data;
 }
 
 void
