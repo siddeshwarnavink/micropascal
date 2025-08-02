@@ -3,7 +3,7 @@
 #define CLOMY_IMPLEMENTATION
 #include "clomy.h"
 
-#include "ast.h"
+#include "codegen.h"
 
 int compiler_main (char *path);
 
@@ -29,12 +29,27 @@ compiler_main (char *path)
 {
   lex lexer = { 0 };
   ast tree = { 0 };
+  arena code_ar = { 0 };
+  ast_node *root;
+  string *code;
+  FILE *f;
 
   if (lex_init (&lexer, path) == 1)
     return 1;
 
-  ast_parse (&tree, &lexer);
+  root = ast_parse (&tree, &lexer);
+  code = codegen (&code_ar, root);
 
+  f = fopen ("out.c", "w");
+  fprintf (f, "%s", code->data);
+  fclose (f);
+
+  arfold (&code_ar);
+
+  system ("gcc out.c");
+  remove ("out.c");
+
+  ast_fold (&tree);
   lex_fold (&lexer);
 
   return 0;

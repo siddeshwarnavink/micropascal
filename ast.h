@@ -6,9 +6,9 @@
 #define AST_EXPECT(cond, msg)                                                 \
   if ((cond))                                                                 \
     {                                                                         \
-      arfold (&ctx->ar);                                                      \
+      ast_fold (ctx);                                                         \
       lex_error (lexer, (msg));                                               \
-      return;                                                                 \
+      goto ast_exit;                                                          \
     }
 
 #define AST_EXPECT_SEMI() AST_EXPECT (token != ';', "Expected semicolon (;)");
@@ -55,8 +55,10 @@ struct ast
 };
 typedef struct ast ast;
 
-void ast_parse (ast *ctx, lex *lexer);
+ast_node *ast_parse (ast *ctx, lex *lexer);
 
 void *ast_parse_expression (ast *ctx, lex *lexer);
+
+void ast_fold (ast *ctx);
 
 #endif /* AST_H */

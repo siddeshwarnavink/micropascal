@@ -22,7 +22,7 @@ reverse_ast_list (ast_node *head)
   return prev;
 }
 
-void
+ast_node *
 ast_parse (ast *ctx, lex *lexer)
 {
   ast_node *new, *block = (ast_node *)0, *exp;
@@ -146,8 +146,11 @@ ast_parse (ast *ctx, lex *lexer)
   if (ctx->root)
     {
       ctx->root = reverse_ast_list (ctx->root);
-      _ast_print_tree (ctx->root, "\n");
+      /* _ast_print_tree (ctx->root, "\n"); */
     }
+
+ast_exit:
+  return ctx->root;
 }
 
 void *
@@ -258,6 +261,12 @@ ast_parse_expression (ast *ctx, lex *lexer)
     return dageti (&value_stk, 0);
 
   return (ast_node *)0;
+}
+
+void
+ast_fold (ast *ctx)
+{
+  arfold (&ctx->ar);
 }
 
 static int
