@@ -31,9 +31,9 @@
 #define CLOMY_STRINGBUILDER_CAPACITY 1024
 #endif /* not CLOMY_STRINGBUILDER_CAPACITY */
 
-#define CLOMY_ALIGN_UP(n, a) (((n) + ((a) - 1)) & ~((a) - 1))
-
+#ifndef CLOMY_ALLOC_MAGIC
 #define CLOMY_ALLOC_MAGIC 0x00636E6B
+#endif /* not CLOMY_ALLOC_MAGIC */
 
 struct clomy_arfree_block
 {
@@ -205,6 +205,13 @@ void clomy_stfold (clomy_ht *ht);
 
 /*----------------------------------------------------------------------*/
 
+struct clomy_string
+{
+  char *data;
+  unsigned int size;
+};
+typedef struct clomy_string clomy_string;
+
 struct clomy_sbchunk
 {
   unsigned int size;
@@ -221,6 +228,9 @@ struct clomy_stringbuilder
   clomy_sbchunk *head, *tail;
 };
 typedef struct clomy_stringbuilder clomy_stringbuilder;
+
+/* Copy string. */
+clomy_string *clomy_stringcpy (clomy_arena *ar, clomy_string *s);
 
 /* Initialize string builder. */
 void clomy_sbinit (clomy_stringbuilder *sb, clomy_arena *ar);
@@ -247,7 +257,7 @@ int clomy_sbpushch (clomy_stringbuilder *sb, char val);
 void clomy_sbrev (clomy_stringbuilder *sb);
 
 /* Returns the constructed string and flushes the string builder. */
-char *clomy_sbflush (clomy_stringbuilder *sb);
+clomy_string *clomy_sbflush (clomy_stringbuilder *sb);
 
 /* Reset the string builder. */
 void clomy_sbreset (clomy_stringbuilder *sb);
@@ -291,7 +301,9 @@ void clomy_sbfold (clomy_stringbuilder *sb);
 #define stfold clomy_stfold
 
 #define stringbuilder clomy_stringbuilder
+#define string clomy_string
 #define sbinit clomy_sbinit
+#define stringcpy clomy_stringcpy
 #define sbinit2 clomy_sbinit2
 #define sbappend clomy_sbappend
 #define sbappendch clomy_sbappendch
@@ -304,6 +316,8 @@ void clomy_sbfold (clomy_stringbuilder *sb);
 #define sbreset clomy_sbreset
 
 #endif /* not CLOMY_NO_SHORT_NAMES */
+
+#define CLOMY_ALIGN_UP(n, a) (((n) + ((a) - 1)) & ~((a) - 1))
 
 #ifdef CLOMY_IMPLEMENTATION
 
@@ -1024,6 +1038,15 @@ _clomy_newsbchunk (clomy_stringbuilder *sb, unsigned int capacity)
   return cnk;
 }
 
+string *
+clomy_stringcpy (clomy_arena *ar, clomy_string *s)
+{
+  string *str = clomy_aralloc (ar, sizeof (clomy_string));
+  str->data = clomy_aralloc (ar, s->size + 1);
+  strcpy (str->data, s->data);
+  return str;
+}
+
 void
 clomy_sbinit (clomy_stringbuilder *sb, clomy_arena *ar)
 {
@@ -1259,29 +1282,35 @@ clomy_sbrev (clomy_stringbuilder *sb)
   sb->head = prev;
 }
 
-char *
+string *
 clomy_sbflush (clomy_stringbuilder *sb)
 {
+  clomy_string *str;
   clomy_sbchunk *ptr = sb->head;
   unsigned int size = sb->size + 1, i, j = 0;
-  char *str;
 
   if (!ptr)
-    return (char *)0;
+    return (clomy_string *)0;
 
   if (sb->ar)
-    str = clomy_aralloc (sb->ar, size);
+    {
+      str = clomy_aralloc (sb->ar, sizeof (clomy_string));
+      str->data = clomy_aralloc (sb->ar, size);
+    }
   else
-    str = malloc (size);
+    {
+      str = malloc (sizeof (clomy_string));
+      str->data = malloc (size);
+    }
 
   if (!str)
-    return (char *)0;
+    return (clomy_string *)0;
 
   while (ptr)
     {
       for (i = 0; i < ptr->size; ++i)
         {
-          str[j++] = ptr->data[i];
+          str->data[j++] = ptr->data[i];
           ptr->data[i] = 0;
         }
 
@@ -1291,7 +1320,8 @@ clomy_sbflush (clomy_stringbuilder *sb)
 
   clomy_sbreset (sb);
 
-  str[j] = '\0';
+  str->data[j] = '\0';
+  str->size = size;
 
   return str;
 }

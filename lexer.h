@@ -4,7 +4,8 @@
 #include "clomy.h"
 
 #define LEX_HANDLE_OP(ctx, ch1, ch2, token)                                   \
-  if ((ctx)->src[(ctx)->pos] == (ch1) && (ctx)->src[(ctx)->pos + 1] == (ch2)) \
+  if ((ctx)->src->data[(ctx)->pos] == (ch1)                                   \
+      && (ctx)->src->data[(ctx)->pos + 1] == (ch2))                           \
     {                                                                         \
       sbreset (&(ctx)->sb);                                                   \
       (ctx)->pos += 2;                                                        \
@@ -15,13 +16,14 @@ struct lex
 {
   arena ar;
   stringbuilder sb;
-  char *src; /* Source code. */
-  unsigned int src_len;
-  char *str;
-  unsigned int str_len;
-  unsigned int pos;
+  string *path;
+  string *src;
+  string *str;
   double float_num;
   long int_num;
+  unsigned int line;
+  unsigned int col;
+  unsigned int pos;
 };
 typedef struct lex lex;
 
@@ -41,6 +43,10 @@ enum lex_token
 int lex_init (lex *ctx, char *path);
 
 int lex_next_token (lex *ctx);
+
+int lex_peek (lex *ctx);
+
+void lex_error (lex *ctx, char *msg);
 
 void lex_fold (lex *ctx);
 

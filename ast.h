@@ -3,9 +3,23 @@
 
 #include "lexer.h"
 
+#define AST_EXPECT(cond, msg)                                                 \
+  if ((cond))                                                                 \
+    {                                                                         \
+      arfold (&ctx->ar);                                                      \
+      lex_error (lexer, (msg));                                               \
+      return;                                                                 \
+    }
+
+#define AST_EXPECT_SEMI() AST_EXPECT (token != ';', "Expected semicolon (;)");
+
 enum ast_type
 {
-  AST_STRLIT = 0,
+  AST_PROGNAME = 0,
+  AST_MAIN_BLOCK,
+  AST_BLOCK,
+  AST_FUNCALL,
+  AST_STRLIT,
   AST_FLOATLIT,
   AST_INTLIT,
   AST_OP
@@ -18,6 +32,13 @@ struct ast_node
   void *data;
 };
 typedef struct ast_node ast_node;
+
+struct ast_data_funcall
+{
+  string *name;
+  ast_node *args_head;
+};
+typedef struct ast_data_funcall ast_data_funcall;
 
 struct ast_data_op
 {
