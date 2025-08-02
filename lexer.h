@@ -46,6 +46,8 @@ int lex_next_token (lex *ctx);
 
 int lex_peek (lex *ctx);
 
+void lex_print_token (lex *ctx, int tok);
+
 void lex_error (lex *ctx, char *msg);
 
 void lex_fold (lex *ctx);

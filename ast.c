@@ -146,11 +146,16 @@ ast_parse (ast *ctx, lex *lexer)
   if (ctx->root)
     {
       ctx->root = reverse_ast_list (ctx->root);
-      /* _ast_print_tree (ctx->root, "\n"); */
+      /*
+      _ast_print_tree (ctx->root, "\n");
+      printf ("\n");
+      */
     }
 
-ast_exit:
   return ctx->root;
+
+ast_err_exit:
+  return (void *)0;
 }
 
 void *
@@ -242,6 +247,9 @@ ast_parse_expression (ast *ctx, lex *lexer)
         {
           break;
         }
+
+      if (lex_peek (lexer) == ')' && op_stk.size == 0)
+        break;
 
       token = lex_next_token (lexer);
     }

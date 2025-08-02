@@ -37,17 +37,31 @@ compiler_main (char *path)
   if (lex_init (&lexer, path) == 1)
     return 1;
 
+  /*
+  int token;
+  while ((token = lex_next_token (&lexer)) != TOKEN_END)
+    {
+      lex_print_token (&lexer, token);
+    }
+    */
+
   root = ast_parse (&tree, &lexer);
+  if (!root)
+    {
+      ast_fold (&tree);
+      lex_fold (&lexer);
+      return 1;
+    }
+
   code = codegen (&code_ar, root);
 
-  f = fopen ("out.c", "w");
+  f = fopen ("a.c", "w");
   fprintf (f, "%s", code->data);
   fclose (f);
 
   arfold (&code_ar);
 
-  system ("gcc out.c");
-  remove ("out.c");
+  system ("cc a.c");
 
   ast_fold (&tree);
   lex_fold (&lexer);

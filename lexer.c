@@ -15,8 +15,8 @@ lex_init (lex *ctx, char *path)
   FILE *file;
   char ch;
 
-  ctx->line = 0;
-  ctx->col = 0;
+  ctx->line = 1;
+  ctx->col = 1;
 
   sbinit (&ctx->sb, &ctx->ar);
 
@@ -124,7 +124,7 @@ lex_next_token (lex *ctx)
           if (ctx->src->data[ctx->pos] == '\n')
             {
               ++ctx->line;
-              ctx->col = 0;
+              ctx->col = 1;
             }
 
           ++ctx->pos;
@@ -203,6 +203,50 @@ lex_peek (lex *ctx)
   ctx->col = saved_col;
 
   return next_token;
+}
+
+void
+lex_print_token (lex *ctx, int tok)
+{
+  printf ("token - ");
+  switch (tok)
+    {
+    case TOKEN_END:
+      printf ("TOKEN_END");
+      break;
+    case TOKEN_IDENTF:
+      printf ("TOKEN_IDENTF");
+      if (ctx->str)
+        printf (" (%s)", ctx->str->data);
+      break;
+    case TOKEN_STRLIT:
+      printf ("TOKEN_STRLIT");
+      if (ctx->str)
+        printf (" (%s)", ctx->str->data);
+      break;
+    case TOKEN_FLOATLIT:
+      printf ("TOKEN_FLOATLIT");
+      break;
+    case TOKEN_INTLIT:
+      printf ("TOKEN_INTLIT (%ld)", ctx->int_num);
+      break;
+    case TOKEN_INFEQ:
+      printf ("TOKEN_INFEQ");
+      break;
+    case TOKEN_GEQ:
+      printf ("TOKEN_GEQ");
+      break;
+    case TOKEN_LEQ:
+      printf ("TOKEN_LEQ");
+      break;
+    case TOKEN_NEQ:
+      printf ("TOKEN_NEQ");
+      break;
+    default:
+      printf ("'%c'", (char)tok);
+      break;
+    }
+  printf ("\n");
 }
 
 void

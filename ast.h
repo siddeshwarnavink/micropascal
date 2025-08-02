@@ -8,7 +8,7 @@
     {                                                                         \
       ast_fold (ctx);                                                         \
       lex_error (lexer, (msg));                                               \
-      goto ast_exit;                                                          \
+      goto ast_err_exit;                                                      \
     }
 
 #define AST_EXPECT_SEMI() AST_EXPECT (token != ';', "Expected semicolon (;)");
