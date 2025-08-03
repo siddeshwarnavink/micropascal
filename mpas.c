@@ -5,19 +5,62 @@
 
 #include "codegen.h"
 
-int compiler_main (char *path);
+int compiler_main (char *path, unsigned short debug, unsigned short target);
+
+void usage (char *prog);
 
 int
 main (int argc, char **argv)
 {
+  int i;
+  unsigned short rtarget = 0, target = TARGET_C, debug = 0;
+
   if (argc > 1)
     {
-      return compiler_main (argv[1]);
+      for (i = 0; i < argc; ++i)
+        {
+          if (rtarget)
+            {
+              if (strcmp (argv[i], "ast") == 0)
+                {
+                  target = TARGET_AST;
+                }
+              else if (strcmp (argv[i], "c") == 0)
+                {
+                  target = TARGET_C;
+                }
+              else
+                {
+                  printf ("Error: Unknown target \"%s\".\n", argv[i]);
+                  usage (argv[0]);
+                  return 1;
+                }
+              rtarget = 0;
+            }
+          else if (argv[i][0] == '-')
+            {
+              switch (argv[i][1])
+                {
+                case 't':
+                  rtarget = 1;
+                  break;
+                case 'd':
+                  debug = 1;
+                  break;
+                default:
+                  printf ("Error: Unknown flag \"-%c\".\n", argv[i][1]);
+                  usage (argv[0]);
+                  return 1;
+                }
+            }
+        }
+
+      return compiler_main (argv[1], debug, target);
     }
   else
     {
-      fprintf (stderr, "Error: No source code provided.\n");
-      fprintf (stderr, "Usage: %s [FILE]\n", argv[0]);
+      fprintf (stderr, "Error: No FILE path provided.\n");
+      usage (argv[0]);
       return 1;
     }
 
@@ -25,7 +68,7 @@ main (int argc, char **argv)
 }
 
 int
-compiler_main (char *path)
+compiler_main (char *path, unsigned short debug, unsigned short target)
 {
   lex lexer = { 0 };
   ast tree = { 0 };
@@ -33,17 +76,18 @@ compiler_main (char *path)
   ast_node *root;
   string *code;
   FILE *f;
+  int token;
 
   if (lex_init (&lexer, path) == 1)
     return 1;
 
-  /*
-  int token;
-  while ((token = lex_next_token (&lexer)) != TOKEN_END)
+  if (debug)
     {
-      lex_print_token (&lexer, token);
+      while ((token = lex_next_token (&lexer)) != TOKEN_END)
+        {
+          lex_print_token (&lexer, token);
+        }
     }
-    */
 
   root = ast_parse (&tree, &lexer);
   if (!root)
@@ -53,16 +97,32 @@ compiler_main (char *path)
       return 1;
     }
 
-  code = codegen (&cgctx, root);
+  if (target == TARGET_AST)
+    {
+      ast_print_tree (tree.root, "\n");
+      printf ("\n");
+    }
+  else
+    {
+      code = codegen (&cgctx, root);
 
-  f = fopen ("a.c", "w");
-  fprintf (f, "%s", code->data);
-  fclose (f);
+      f = fopen ("a.c", "w");
+      fprintf (f, "%s", code->data);
+      fclose (f);
 
-  system ("cc a.c");
-  codegen_fold (&cgctx);
+      system ("cc a.c");
+      codegen_fold (&cgctx);
+    }
   ast_fold (&tree);
   lex_fold (&lexer);
 
   return 0;
+}
+
+void
+usage (char *prog)
+{
+  fprintf (stderr, "Usage: %s [FILE] [FLAGS]\n", prog);
+  fprintf (stderr, "    -t     target (ast, c)\n");
+  fprintf (stderr, "    -d     show debug\n");
 }

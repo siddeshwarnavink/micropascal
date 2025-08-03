@@ -25,6 +25,7 @@ enum ast_type
   AST_STRLIT,
   AST_FLOATLIT,
   AST_INTLIT,
+  AST_BOOL,
   AST_OP
 };
 
@@ -73,6 +74,8 @@ struct ast
   ast_node *root;
 };
 typedef struct ast ast;
+
+void ast_print_tree (ast_node *root, char *delim);
 
 ast_node *ast_parse (ast *ctx, lex *lexer);
 

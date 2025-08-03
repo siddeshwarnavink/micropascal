@@ -9,6 +9,7 @@ var
   f: real;
   name: string[16];
   foo: string;
+  isTrue: boolean;
 begin
   a := 10;
   a := a + 2;
@@ -19,6 +20,9 @@ begin
   d := 23.5;
   e := 35.4;
   f := d + e;
+
+  isTrue := false;
+  isTrue := !isTrue;
 
   writeln('%d', c);
   writeln('%f', f);

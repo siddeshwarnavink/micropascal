@@ -31,6 +31,8 @@ void
 _parse_exp (cg *ctx, ast_node *ptr)
 {
   char buf[32];
+  ast_data_op *op_data;
+
   switch (ptr->type)
     {
     case AST_VAR_DECLARE:
@@ -46,14 +48,21 @@ _parse_exp (cg *ctx, ast_node *ptr)
       sprintf (buf, "%ld", *((long *)ptr->data));
       sbappend (&ctx->sb, buf);
       break;
+    case AST_BOOL:
+      sprintf (buf, "%d", *((unsigned short *)ptr->data));
+      sbappend (&ctx->sb, buf);
+      break;
     case AST_FLOATLIT:
       sprintf (buf, "%f", *((double *)ptr->data));
       sbappend (&ctx->sb, buf);
       break;
     case AST_OP:
-      _parse_exp (ctx, ((ast_data_op *)ptr->data)->left);
-      sbappendch (&ctx->sb, ((ast_data_op *)ptr->data)->op);
-      _parse_exp (ctx, ((ast_data_op *)ptr->data)->right);
+      op_data = ptr->data;
+      if (op_data->left)
+        _parse_exp (ctx, op_data->left);
+      sbappendch (&ctx->sb, op_data->op);
+      if (op_data->right)
+        _parse_exp (ctx, op_data->right);
       break;
     }
 }
@@ -88,7 +97,10 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
                   sbappend (&ctx->sb, "double");
                   break;
                 case AST_STRLIT:
-                  sbappend (&ctx->sb, "char ");
+                  sbappend (&ctx->sb, "char");
+                  break;
+                case AST_BOOL:
+                  sbappend (&ctx->sb, "unsigned short");
                   break;
                 default:
                   continue;

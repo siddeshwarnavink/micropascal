@@ -5,7 +5,6 @@ static ast_node *_ast_new_node (ast *ctx, short type);
 static ast_node *_create_op_node (ast *ctx, char op, da *value_stk);
 static void _ast_print_datatype (unsigned short dtype);
 static void _ast_print_node (ast_node *n);
-static void _ast_print_tree (ast_node *n, char *delim);
 static int _is_token_op (int tok);
 static int _is_expression_terminator (int tok);
 
@@ -21,6 +20,19 @@ reverse_ast_list (ast_node *head)
       curr = next;
     }
   return prev;
+}
+
+void
+ast_print_tree (ast_node *root, char *delim)
+{
+  while (root)
+    {
+      _ast_print_node (root);
+      if (root->next)
+        printf ("%s", delim);
+
+      root = root->next;
+    }
 }
 
 ast_node *
@@ -110,6 +122,8 @@ ast_parse (ast *ctx, lex *lexer)
             vd_data->datatype = AST_FLOATLIT;
           else if (strcmp (str_data2->data, "string") == 0)
             vd_data->datatype = AST_STRLIT;
+          else if (strcmp (str_data2->data, "boolean") == 0)
+            vd_data->datatype = AST_BOOL;
           else
             AST_ERROR_IF (1, "Unknown datatype.");
 
@@ -162,6 +176,10 @@ ast_parse (ast *ctx, lex *lexer)
                       exp->next = funcall_data->args_head;
                       funcall_data->args_head = exp;
                     }
+                  else
+                    {
+                      goto ast_err_exit;
+                    }
 
                   token = lex_peek (lexer);
                   if (token == ',')
@@ -213,6 +231,10 @@ ast_parse (ast *ctx, lex *lexer)
                   new->next = block->data;
                   block->data = new;
                 }
+              else
+                {
+                  goto ast_err_exit;
+                }
             }
           else
             {
@@ -238,13 +260,7 @@ ast_parse (ast *ctx, lex *lexer)
   AST_ERROR_IF (!found_entry, "Cannot find entry point.");
 
   if (ctx->root)
-    {
-      ctx->root = reverse_ast_list (ctx->root);
-      /*
-      _ast_print_tree (ctx->root, "\n");
-      printf ("\n");
-      */
-    }
+    ctx->root = reverse_ast_list (ctx->root);
 
   stfold (&ctx->ident_table);
 
@@ -264,6 +280,7 @@ ast_parse_expression (ast *ctx, lex *lexer)
   void *ptr;
   int token, current_prec, top_prec;
   char current_op, top_op;
+  unsigned short *bool_data;
 
   dainit (&value_stk, &ctx->ar, sizeof (ast_node), 8);
   dainit (&op_stk, &ctx->ar, sizeof (char), 8);
@@ -309,6 +326,20 @@ ast_parse_expression (ast *ctx, lex *lexer)
               AST_ERROR_IF (var->type != AST_VAR_DECLARE,
                             "Expected identifier variable.");
               dapush (&value_stk, var);
+            }
+          else if (strcmp (lexer->str->data, "true") == 0
+                   || strcmp (lexer->str->data, "false") == 0)
+            {
+              new = _ast_new_node (ctx, AST_BOOL);
+              bool_data = aralloc (&ctx->ar, sizeof (unsigned short));
+              *bool_data = strcmp (lexer->str->data, "true") == 0 ? 1 : 0;
+              new->data = bool_data;
+              return new;
+            }
+          else
+            {
+              printf ("%s\n", lexer->str->data);
+              AST_ERROR_IF (1, "Unknown identifier. ");
             }
         }
       else if (token == '(')
@@ -433,8 +464,11 @@ _create_op_node (ast *ctx, char op, da *value_stk)
   ast_data_op *op_data = aralloc (&ctx->ar, sizeof (ast_data_op));
 
   op_data->op = op;
+
   op_data->right = dapop (value_stk);
-  op_data->left = dapop (value_stk);
+  if (op != '!')
+    op_data->left = dapop (value_stk);
+
   new_node->data = op_data;
 
   return new_node;
@@ -453,6 +487,9 @@ _ast_print_datatype (unsigned short dtype)
       break;
     case AST_FLOATLIT:
       printf ("real");
+      break;
+    case AST_BOOL:
+      printf ("boolean");
       break;
     default:
       printf ("%d?", dtype);
@@ -478,7 +515,7 @@ _ast_print_node (ast_node *n)
     case AST_VAR_ASSIGN:
       va_data = n->data;
       vd_data = va_data->var->data;
-      printf ("(var-assign %s ", vd_data->name->data);
+      printf ("(var %s ", vd_data->name->data);
       _ast_print_node (va_data->value);
       printf (")");
       break;
@@ -491,18 +528,18 @@ _ast_print_node (ast_node *n)
       break;
     case AST_MAIN_BLOCK:
       printf ("(main-block\n  ");
-      _ast_print_tree ((ast_node *)n->data, "\n  ");
+      ast_print_tree ((ast_node *)n->data, "\n  ");
       printf (")");
       break;
     case AST_BLOCK:
       printf ("(block\n  ");
-      _ast_print_tree ((ast_node *)n->data, "\n  ");
+      ast_print_tree ((ast_node *)n->data, "\n  ");
       printf (")");
       break;
     case AST_FUNCALL:
       funcall_data = n->data;
       printf ("(%s ", funcall_data->name->data);
-      _ast_print_tree (funcall_data->args_head, " ");
+      ast_print_tree (funcall_data->args_head, " ");
       printf (")");
       break;
     case AST_STRLIT:
@@ -511,6 +548,9 @@ _ast_print_node (ast_node *n)
       break;
     case AST_INTLIT:
       printf ("%ld", *(long *)n->data);
+      break;
+    case AST_BOOL:
+      printf ("%s", *((unsigned short *)n->data) == 1 ? "true" : "false");
       break;
     case AST_OP:
       op_data = n->data;
@@ -532,23 +572,10 @@ _ast_print_node (ast_node *n)
     }
 }
 
-static void
-_ast_print_tree (ast_node *root, char *delim)
-{
-  while (root)
-    {
-      _ast_print_node (root);
-      if (root->next)
-        printf ("%s", delim);
-
-      root = root->next;
-    }
-}
-
 static int
 _is_token_op (int tok)
 {
-  return tok == '+' || tok == '-' || tok == '*' || tok == '/';
+  return tok == '+' || tok == '-' || tok == '*' || tok == '/' || tok == '!';
 }
 
 static int

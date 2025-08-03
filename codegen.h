@@ -3,6 +3,12 @@
 
 #include "ast.h"
 
+enum cg_target
+{
+  TARGET_AST = 0,
+  TARGET_C
+};
+
 struct cg
 {
   arena ar;
