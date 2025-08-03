@@ -25,25 +25,28 @@ reverse_ast_list (ast_node *head)
 ast_node *
 ast_parse (ast *ctx, lex *lexer)
 {
-  ast_node *new, *block = (ast_node *)0, *exp;
-  string *str_data;
+  ast_node *new, *block = (ast_node *)0, *exp, *var;
+  string *str_data, *str_data2;
+  ast_data_var_declare *vard_data;
   ast_data_funcall *funcall_data;
+  void *ptr;
   int token;
-  unsigned short found_entry = 0;
+  unsigned short found_entry = 0, rvar = 0;
 
+  htinit (&ctx->ident_table, &ctx->ar, 16, sizeof (ast_node *));
   ctx->root = (void *)0;
 
   /* Program name. */
   token = lex_next_token (lexer);
-  AST_EXPECT (token != TOKEN_IDENTF
-                  || strcmp (lexer->str->data, "program") != 0,
-              "Expected \"program\" statement.");
+  AST_ERROR_IF (token != TOKEN_IDENTF
+                    || strcmp (lexer->str->data, "program") != 0,
+                "Expected \"program\" statement.");
 
   token = lex_next_token (lexer);
-  AST_EXPECT (token != TOKEN_IDENTF, "Expected program name.");
+  AST_ERROR_IF (token != TOKEN_IDENTF, "Expected program name.");
 
   token = lex_next_token (lexer);
-  AST_EXPECT_SEMI ()
+  AST_EXPECT_SEMICOLON ()
 
   new = _ast_new_node (ctx, AST_PROGNAME);
   str_data = stringcpy (&ctx->ar, lexer->str);
@@ -53,10 +56,20 @@ ast_parse (ast *ctx, lex *lexer)
 
   while ((token = lex_next_token (lexer)) != TOKEN_END)
     {
-      /* Handle block. */
-      if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "begin") == 0)
+      /* Handle var. */
+      if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "var") == 0)
         {
-          AST_EXPECT (block != (ast_node *)0, "Nested blocks not allowed.");
+          AST_ERROR_IF (block != (ast_node *)0,
+                        "Variable declaration not allowed inside block.");
+          rvar = 1;
+        }
+
+      /* Handle block begin. */
+      else if (token == TOKEN_IDENTF
+               && strcmp (lexer->str->data, "begin") == 0)
+        {
+          AST_ERROR_IF (block != (ast_node *)0, "Nested blocks not allowed.");
+          rvar = 0;
           block = _ast_new_node (ctx, AST_BLOCK);
           block->data = (void *)0;
         }
@@ -64,65 +77,119 @@ ast_parse (ast *ctx, lex *lexer)
       /* Handle block end. */
       else if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "end") == 0)
         {
-          AST_EXPECT (block == (ast_node *)0, "Invalid use of end.");
+          AST_ERROR_IF (block == (ast_node *)0, "Invalid use of end.");
           block->data = reverse_ast_list ((ast_node *)block->data);
           block->next = ctx->root;
           ctx->root = block;
           block = (void *)0;
         }
+
+      /* Handle variable(s) declaration(s). */
+      else if (rvar && token == TOKEN_IDENTF)
+        {
+          str_data = stringcpy (&ctx->ar, lexer->str);
+
+          token = lex_next_token (lexer);
+          AST_ERROR_IF (token != ':', "Expected ':'");
+
+          token = lex_next_token (lexer);
+          AST_ERROR_IF (token != TOKEN_IDENTF,
+                        "Expected data type of variable.");
+          str_data2 = stringcpy (&ctx->ar, lexer->str);
+
+          new = _ast_new_node (ctx, AST_VAR_DECLARE);
+          vard_data = aralloc (&ctx->ar, sizeof (ast_data_var_declare));
+          vard_data->name = str_data;
+          new->data = vard_data;
+
+          if (strcmp (str_data2->data, "integer") == 0)
+            vard_data->datatype = AST_INTLIT;
+          else if (strcmp (str_data2->data, "real") == 0)
+            vard_data->datatype = AST_FLOATLIT;
+          else
+            AST_ERROR_IF (1, "Unknown datatype.");
+
+          token = lex_next_token (lexer);
+          AST_EXPECT_SEMICOLON ();
+
+          stput (&ctx->ident_table, vard_data->name->data, &new);
+
+          new->next = ctx->root;
+          ctx->root = new;
+        }
       else if (block && token == TOKEN_IDENTF)
         {
           str_data = stringcpy (&ctx->ar, lexer->str);
           token = lex_next_token (lexer);
-          switch (token)
+
+          /* Function call */
+          if (token == '(')
             {
-            case '(':
-              /* Function call */
-              {
-                new = _ast_new_node (ctx, AST_FUNCALL);
-                funcall_data = aralloc (&ctx->ar, sizeof (ast_data_funcall));
-                funcall_data->name = str_data;
-                funcall_data->args_head = (void *)0;
-                new->data = funcall_data;
+              new = _ast_new_node (ctx, AST_FUNCALL);
+              funcall_data = aralloc (&ctx->ar, sizeof (ast_data_funcall));
+              funcall_data->name = str_data;
+              funcall_data->args_head = (void *)0;
+              new->data = funcall_data;
 
-                token = lex_peek (lexer);
-                while (!_is_expression_terminator (token))
-                  {
-                    exp = ast_parse_expression (ctx, lexer);
-                    if (exp)
-                      {
-                        exp->next = funcall_data->args_head;
-                        funcall_data->args_head = exp;
-                      }
+              token = lex_peek (lexer);
+              while (!_is_expression_terminator (token))
+                {
+                  exp = ast_parse_expression (ctx, lexer);
+                  if (exp)
+                    {
+                      exp->next = funcall_data->args_head;
+                      funcall_data->args_head = exp;
+                    }
 
-                    token = lex_peek (lexer);
-                    if (token == ',')
-                      {
-                        lex_next_token (lexer);
-                        token = lex_peek (lexer);
-                      }
-                  }
+                  token = lex_peek (lexer);
+                  if (token == ',')
+                    {
+                      lex_next_token (lexer);
+                      token = lex_peek (lexer);
+                    }
+                }
 
-                if (token == ')')
-                  {
-                    lex_next_token (lexer);
-                    token = lex_peek (lexer);
-                  }
+              if (token == ')')
+                {
+                  lex_next_token (lexer);
+                  token = lex_peek (lexer);
+                }
 
-                AST_EXPECT_SEMI ();
+              AST_EXPECT_SEMICOLON ();
 
-                funcall_data->args_head
-                    = reverse_ast_list (funcall_data->args_head);
+              funcall_data->args_head
+                  = reverse_ast_list (funcall_data->args_head);
 
-                if (block)
-                  {
-                    new->next = block->data;
-                    block->data = new;
-                  }
+              if (block)
+                {
+                  new->next = block->data;
+                  block->data = new;
+                }
 
-                new = (void *)0;
-              }
-              break;
+              new = (void *)0;
+            }
+          /* Variable assignment. */
+          else if ((ptr = stget (&ctx->ident_table, str_data->data))
+                   != (void *)0)
+            {
+              var = *((ast_node **)ptr);
+              vard_data = var->data;
+
+              AST_ERROR_IF (var->type != AST_VAR_DECLARE,
+                            "Expected identifier variable.");
+              AST_ERROR_IF (token != TOKEN_INFEQ, "Expected ':='");
+
+              exp = ast_parse_expression (ctx, lexer);
+              if (exp)
+                {
+                  token = lex_next_token (lexer);
+                  AST_EXPECT_SEMICOLON ();
+                  vard_data->value = exp;
+                }
+            }
+          else
+            {
+              AST_ERROR_IF (1, "Unknown identifier.");
             }
         }
       else
@@ -141,7 +208,7 @@ ast_parse (ast *ctx, lex *lexer)
         }
     }
 
-  AST_EXPECT (!found_entry, "Cannot find entry point.");
+  AST_ERROR_IF (!found_entry, "Cannot find entry point.");
 
   if (ctx->root)
     {
@@ -155,6 +222,7 @@ ast_parse (ast *ctx, lex *lexer)
   return ctx->root;
 
 ast_err_exit:
+  stfold (&ctx->ident_table);
   return (void *)0;
 }
 
@@ -162,8 +230,10 @@ void *
 ast_parse_expression (ast *ctx, lex *lexer)
 {
   da value_stk = { 0 }, op_stk = { 0 };
-  ast_node *new, *node;
+  ast_node *new, *node, *var;
   long *int_data;
+  double *float_data;
+  void *ptr;
   int token, current_prec, top_prec;
   char current_op, top_op;
 
@@ -184,13 +254,34 @@ ast_parse_expression (ast *ctx, lex *lexer)
 
           return new;
         }
-      else if (token == TOKEN_INTLIT)
+      else if (token == TOKEN_INTLIT || token == TOKEN_FLOATLIT)
         {
-          new = _ast_new_node (ctx, AST_INTLIT);
-          int_data = aralloc (&ctx->ar, sizeof (long));
-          *int_data = lexer->int_num;
-          new->data = int_data;
+          if (token == TOKEN_INTLIT)
+            {
+              new = _ast_new_node (ctx, AST_INTLIT);
+              int_data = aralloc (&ctx->ar, sizeof (long));
+              *int_data = lexer->int_num;
+              new->data = int_data;
+            }
+          else
+            {
+              new = _ast_new_node (ctx, AST_FLOATLIT);
+              float_data = aralloc (&ctx->ar, sizeof (double));
+              *float_data = lexer->float_num;
+              new->data = float_data;
+            }
           dapush (&value_stk, new);
+        }
+      else if (token == TOKEN_IDENTF)
+        {
+          // TODO
+          if ((ptr = stget (&ctx->ident_table, lexer->str->data)) != (void *)0)
+            {
+              var = *((ast_node **)ptr);
+              AST_ERROR_IF (var->type != AST_VAR_DECLARE,
+                            "Expected identifier variable.");
+              dapush (&value_stk, var);
+            }
         }
       else if (token == '(')
         {
@@ -248,6 +339,9 @@ ast_parse_expression (ast *ctx, lex *lexer)
           break;
         }
 
+      if (lex_peek (lexer) == ';')
+        break;
+
       if (lex_peek (lexer) == ')' && op_stk.size == 0)
         break;
 
@@ -268,6 +362,7 @@ ast_parse_expression (ast *ctx, lex *lexer)
   if (value_stk.size > 0)
     return dageti (&value_stk, 0);
 
+ast_err_exit:
   return (ast_node *)0;
 }
 
@@ -328,6 +423,28 @@ _ast_print_node (ast_node *n)
     {
     case AST_PROGNAME:
       printf ("(program %s)", ((string *)n->data)->data);
+      break;
+    case AST_VAR_DECLARE:
+      printf ("(var-declare %s ",
+              ((ast_data_var_declare *)n->data)->name->data);
+      switch (((ast_data_var_declare *)n->data)->datatype)
+        {
+        case AST_INTLIT:
+          printf ("integer");
+          break;
+        case AST_FLOATLIT:
+          printf ("real");
+          break;
+        default:
+          printf ("%d?", ((ast_data_var_declare *)n->data)->datatype);
+          break;
+        }
+      printf (" ");
+      if (((ast_data_var_declare *)n->data)->value)
+        _ast_print_node (((ast_data_var_declare *)n->data)->value);
+      else
+        printf ("nil");
+      printf (")");
       break;
     case AST_MAIN_BLOCK:
       printf ("(main-block\n  ");

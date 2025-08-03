@@ -1,72 +1,133 @@
 #include "codegen.h"
 
-void _parse_exp (stringbuilder *sb, ast_node *ptr);
-void _codegen_cc_parse (stringbuilder *sb, ast_node *ptr);
-void _codegen_cc (stringbuilder *sb, ast_node *ptr);
+void _ident_prefix (cg *ctx);
+void _parse_exp (cg *ctx, ast_node *ptr);
+void _codegen_cc_parse (cg *ctx, ast_node *ptr);
+void _codegen_cc (cg *ctx, ast_node *ptr);
 
 string *
-codegen (arena *ar, ast_node *root)
+codegen (cg *ctx, ast_node *root)
 {
-  stringbuilder sb = { 0 };
-  ast_node *ptr = root;
+  dainit (&ctx->var_declares, &ctx->ar, 32, sizeof (ast_node *));
+  sbinit (&ctx->sb, &ctx->ar);
+  _codegen_cc (ctx, root);
 
-  sbinit (&sb, ar);
-
-  _codegen_cc (&sb, ptr);
-
-  return sbflush (&sb);
+  return sbflush (&ctx->sb);
 }
 
 void
-_parse_exp (stringbuilder *sb, ast_node *ptr)
+codegen_fold (cg *ctx)
+{
+  dafold (&ctx->var_declares);
+  arfold (&ctx->ar);
+}
+
+void
+_ident_prefix (cg *ctx)
+{
+  sbappend (&ctx->sb, "_P");
+}
+
+void
+_parse_exp (cg *ctx, ast_node *ptr)
 {
   char buf[32];
   switch (ptr->type)
     {
+    case AST_VAR_DECLARE:
+      _ident_prefix (ctx);
+      sbappend (&ctx->sb, ((ast_data_var_declare *)ptr->data)->name->data);
+      break;
     case AST_STRLIT:
-      sbappendch (sb, '"');
-      sbappend (sb, ((string *)ptr->data)->data);
-      sbappendch (sb, '"');
+      sbappendch (&ctx->sb, '"');
+      sbappend (&ctx->sb, ((string *)ptr->data)->data);
+      sbappendch (&ctx->sb, '"');
       break;
     case AST_INTLIT:
       sprintf (buf, "%ld", *((long *)ptr->data));
-      sbappend (sb, buf);
+      sbappend (&ctx->sb, buf);
+      break;
+    case AST_FLOATLIT:
+      sprintf (buf, "%f", *((double *)ptr->data));
+      sbappend (&ctx->sb, buf);
       break;
     case AST_OP:
-      _parse_exp (sb, ((ast_data_op *)ptr->data)->left);
-      sbappendch (sb, ((ast_data_op *)ptr->data)->op);
-      _parse_exp (sb, ((ast_data_op *)ptr->data)->right);
+      _parse_exp (ctx, ((ast_data_op *)ptr->data)->left);
+      sbappendch (&ctx->sb, ((ast_data_op *)ptr->data)->op);
+      _parse_exp (ctx, ((ast_data_op *)ptr->data)->right);
       break;
     }
 }
 
 void
-_codegen_cc_parse (stringbuilder *sb, ast_node *ptr)
+_codegen_cc_parse (cg *ctx, ast_node *ptr)
 {
   ast_node *arg;
+  ast_data_var_declare *var;
+  int i;
 
   while (ptr)
     {
       switch (ptr->type)
         {
         case AST_MAIN_BLOCK:
-          sbappend (sb, "int main() {\n");
-          _codegen_cc_parse (sb, (ast_node *)ptr->data);
-          sbappend (sb, "return 0;\n");
-          sbappend (sb, "}\n");
+          sbappend (&ctx->sb, "int main() {\n");
+
+          for (i = ctx->var_declares.size - 1; i >= 0; --i)
+            {
+              arg = *(ast_node **)dageti (&ctx->var_declares, i);
+              var = arg->data;
+
+              switch (var->datatype)
+                {
+                case AST_INTLIT:
+                  sbappend (&ctx->sb, "long");
+                  break;
+                case AST_FLOATLIT:
+                  sbappend (&ctx->sb, "double");
+                  break;
+                default:
+                  continue;
+                }
+
+              sbappendch (&ctx->sb, ' ');
+              _ident_prefix (ctx);
+              sbappend (&ctx->sb, var->name->data);
+
+              if (var->value)
+                {
+                  sbappendch (&ctx->sb, '=');
+                  _parse_exp (ctx, var->value);
+                  sbappendch (&ctx->sb, ';');
+                }
+              else
+                {
+                  sbappendch (&ctx->sb, ';');
+                }
+              sbappendch (&ctx->sb, '\n');
+              dadel (&ctx->var_declares, i);
+            }
+
+          _codegen_cc_parse (ctx, (ast_node *)ptr->data);
+          sbappend (&ctx->sb, "return 0;\n");
+          sbappend (&ctx->sb, "}\n");
+          break;
+        case AST_VAR_DECLARE:
+          dapush (&ctx->var_declares, &ptr);
           break;
         case AST_FUNCALL:
-          sbappend (sb, ((ast_data_funcall *)ptr->data)->name->data);
-          sbappendch (sb, '(');
+          _ident_prefix (ctx);
+          sbappend (&ctx->sb, ((ast_data_funcall *)ptr->data)->name->data);
+          sbappendch (&ctx->sb, '(');
           arg = ((ast_data_funcall *)ptr->data)->args_head;
           while (arg)
             {
-              _parse_exp (sb, arg);
+              _parse_exp (ctx, arg);
               if (arg->next)
-                sbappendch (sb, ',');
+                sbappendch (&ctx->sb, ',');
               arg = arg->next;
             }
-          sbappend (sb, ");\n");
+          sbappend (&ctx->sb, ");\n");
           break;
         }
       ptr = ptr->next;
@@ -74,17 +135,17 @@ _codegen_cc_parse (stringbuilder *sb, ast_node *ptr)
 }
 
 void
-_codegen_cc (stringbuilder *sb, ast_node *ptr)
+_codegen_cc (cg *ctx, ast_node *ptr)
 {
 
-  sbappend (sb, "#include <stdio.h>\n");
-  sbappend (sb, "#include <stdarg.h>\n");
-  sbappend (sb, "void writeln(const char *format, ...) {\n");
-  sbappend (sb, "va_list args;\n");
-  sbappend (sb, "va_start(args, format);\n");
-  sbappend (sb, "vprintf(format, args);\n");
-  sbappend (sb, "printf(\"\\n\");\n");
-  sbappend (sb, "va_end(args);\n");
-  sbappend (sb, "}\n");
-  _codegen_cc_parse (sb, ptr);
+  sbappend (&ctx->sb, "#include <stdio.h>\n");
+  sbappend (&ctx->sb, "#include <stdarg.h>\n");
+  sbappend (&ctx->sb, "void _Pwriteln(const char *format, ...) {\n");
+  sbappend (&ctx->sb, "va_list args;\n");
+  sbappend (&ctx->sb, "va_start(args, format);\n");
+  sbappend (&ctx->sb, "vprintf(format, args);\n");
+  sbappend (&ctx->sb, "printf(\"\\n\");\n");
+  sbappend (&ctx->sb, "va_end(args);\n");
+  sbappend (&ctx->sb, "}\n");
+  _codegen_cc_parse (ctx, ptr);
 }

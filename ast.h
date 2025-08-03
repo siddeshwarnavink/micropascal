@@ -3,7 +3,7 @@
 
 #include "lexer.h"
 
-#define AST_EXPECT(cond, msg)                                                 \
+#define AST_ERROR_IF(cond, msg)                                                 \
   if ((cond))                                                                 \
     {                                                                         \
       ast_fold (ctx);                                                         \
@@ -11,12 +11,13 @@
       goto ast_err_exit;                                                      \
     }
 
-#define AST_EXPECT_SEMI() AST_EXPECT (token != ';', "Expected semicolon (;)");
+#define AST_EXPECT_SEMICOLON() AST_ERROR_IF (token != ';', "Expected semicolon (;)");
 
 enum ast_type
 {
   AST_PROGNAME = 0,
   AST_MAIN_BLOCK,
+  AST_VAR_DECLARE,
   AST_BLOCK,
   AST_FUNCALL,
   AST_STRLIT,
@@ -32,6 +33,14 @@ struct ast_node
   void *data;
 };
 typedef struct ast_node ast_node;
+
+struct ast_data_var_declare
+{
+  string *name;
+  unsigned short datatype;
+  ast_node *value;
+};
+typedef struct ast_data_var_declare ast_data_var_declare;
 
 struct ast_data_funcall
 {
@@ -51,6 +60,7 @@ typedef struct ast_data_op ast_data_op;
 struct ast
 {
   arena ar;
+  ht ident_table;
   ast_node *root;
 };
 typedef struct ast ast;

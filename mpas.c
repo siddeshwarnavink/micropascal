@@ -29,7 +29,7 @@ compiler_main (char *path)
 {
   lex lexer = { 0 };
   ast tree = { 0 };
-  arena code_ar = { 0 };
+  cg cgctx = { 0 };
   ast_node *root;
   string *code;
   FILE *f;
@@ -53,16 +53,15 @@ compiler_main (char *path)
       return 1;
     }
 
-  code = codegen (&code_ar, root);
+  code = codegen (&cgctx, root);
 
   f = fopen ("a.c", "w");
   fprintf (f, "%s", code->data);
   fclose (f);
 
-  arfold (&code_ar);
-
   system ("cc a.c");
 
+  codegen_fold (&cgctx);
   ast_fold (&tree);
   lex_fold (&lexer);
 
