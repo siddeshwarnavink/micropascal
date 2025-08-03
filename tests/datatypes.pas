@@ -7,6 +7,8 @@ var
   d: real;
   e: real;
   f: real;
+  name: string[16];
+  foo: string;
 begin
   a := 10;
   a := a + 2;
@@ -20,4 +22,14 @@ begin
 
   writeln('%d', c);
   writeln('%f', f);
+
+  name := 'John doe';
+
+  writeln(name);
+
+  foo := name;
+  name := 'Sid';
+
+  writeln(foo);
+  writeln(name);
 end.

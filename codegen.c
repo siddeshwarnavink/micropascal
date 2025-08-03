@@ -11,7 +11,6 @@ codegen (cg *ctx, ast_node *root)
   dainit (&ctx->var_declares, &ctx->ar, 32, sizeof (ast_node *));
   sbinit (&ctx->sb, &ctx->ar);
   _codegen_cc (ctx, root);
-
   return sbflush (&ctx->sb);
 }
 
@@ -64,6 +63,8 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
 {
   ast_node *arg;
   ast_data_var_declare *var;
+  ast_data_var_assign *va_data;
+  char buf[32];
   int i;
 
   while (ptr)
@@ -86,6 +87,9 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
                 case AST_FLOATLIT:
                   sbappend (&ctx->sb, "double");
                   break;
+                case AST_STRLIT:
+                  sbappend (&ctx->sb, "char ");
+                  break;
                 default:
                   continue;
                 }
@@ -93,27 +97,46 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
               sbappendch (&ctx->sb, ' ');
               _ident_prefix (ctx);
               sbappend (&ctx->sb, var->name->data);
+              if (var->arsize > 0)
+                {
+                  sprintf (buf, "%ld", var->arsize);
+                  sbappendch (&ctx->sb, '[');
+                  sbappend (&ctx->sb, buf);
+                  sbappendch (&ctx->sb, ']');
+                }
 
-              if (var->value)
-                {
-                  sbappendch (&ctx->sb, '=');
-                  _parse_exp (ctx, var->value);
-                  sbappendch (&ctx->sb, ';');
-                }
-              else
-                {
-                  sbappendch (&ctx->sb, ';');
-                }
-              sbappendch (&ctx->sb, '\n');
-              dadel (&ctx->var_declares, i);
+              sbappend (&ctx->sb, ";\n");
             }
 
-          _codegen_cc_parse (ctx, (ast_node *)ptr->data);
+          _codegen_cc_parse (ctx, ptr->data);
           sbappend (&ctx->sb, "return 0;\n");
           sbappend (&ctx->sb, "}\n");
           break;
         case AST_VAR_DECLARE:
           dapush (&ctx->var_declares, &ptr);
+          break;
+        case AST_VAR_ASSIGN:
+          va_data = ptr->data;
+          var = va_data->var->data;
+
+          if (var->datatype == AST_STRLIT)
+            {
+              sbappend (&ctx->sb, "strcpy(");
+              _ident_prefix (ctx);
+              sbappend (&ctx->sb, var->name->data);
+              sbappendch (&ctx->sb, ',');
+              _parse_exp (ctx, va_data->value);
+              sbappend (&ctx->sb, ");\n");
+            }
+          else
+            {
+              _ident_prefix (ctx);
+              sbappend (&ctx->sb, var->name->data);
+              sbappendch (&ctx->sb, '=');
+              _parse_exp (ctx, va_data->value);
+              sbappend (&ctx->sb, ";\n");
+            }
+
           break;
         case AST_FUNCALL:
           _ident_prefix (ctx);
@@ -139,6 +162,7 @@ _codegen_cc (cg *ctx, ast_node *ptr)
 {
 
   sbappend (&ctx->sb, "#include <stdio.h>\n");
+  sbappend (&ctx->sb, "#include <string.h>\n");
   sbappend (&ctx->sb, "#include <stdarg.h>\n");
   sbappend (&ctx->sb, "void _Pwriteln(const char *format, ...) {\n");
   sbappend (&ctx->sb, "va_list args;\n");

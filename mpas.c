@@ -60,7 +60,6 @@ compiler_main (char *path)
   fclose (f);
 
   system ("cc a.c");
-
   codegen_fold (&cgctx);
   ast_fold (&tree);
   lex_fold (&lexer);

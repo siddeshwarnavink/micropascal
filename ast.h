@@ -19,6 +19,7 @@ enum ast_type
   AST_PROGNAME = 0,
   AST_MAIN_BLOCK,
   AST_VAR_DECLARE,
+  AST_VAR_ASSIGN,
   AST_BLOCK,
   AST_FUNCALL,
   AST_STRLIT,
@@ -39,9 +40,16 @@ struct ast_data_var_declare
 {
   string *name;
   unsigned short datatype;
-  ast_node *value;
+  unsigned long arsize;
 };
 typedef struct ast_data_var_declare ast_data_var_declare;
+
+struct ast_data_var_assign
+{
+  ast_node *var;
+  ast_node *value;
+};
+typedef struct ast_data_var_assign ast_data_var_assign;
 
 struct ast_data_funcall
 {
@@ -68,16 +76,7 @@ typedef struct ast ast;
 
 ast_node *ast_parse (ast *ctx, lex *lexer);
 
-/* Pass variable node in SUBS and the actual value of the variable will be
-   substituted.
-
-   This is for situations where we assign value of variable with itself. In
-   this case, the previous value needs to be substituted.
-
-   Eg:
-     a := 10;
-     a := a + 2; */
-void *ast_parse_expression (ast *ctx, lex *lexer, ast_node *subs);
+void *ast_parse_expression (ast *ctx, lex *lexer);
 
 void ast_fold (ast *ctx);
 
