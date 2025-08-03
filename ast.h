@@ -3,7 +3,7 @@
 
 #include "lexer.h"
 
-#define AST_ERROR_IF(cond, msg)                                                 \
+#define AST_ERROR_IF(cond, msg)                                               \
   if ((cond))                                                                 \
     {                                                                         \
       ast_fold (ctx);                                                         \
@@ -11,7 +11,8 @@
       goto ast_err_exit;                                                      \
     }
 
-#define AST_EXPECT_SEMICOLON() AST_ERROR_IF (token != ';', "Expected semicolon (;)");
+#define AST_EXPECT_SEMICOLON()                                                \
+  AST_ERROR_IF (token != ';', "Expected semicolon (;)");
 
 enum ast_type
 {
@@ -67,7 +68,16 @@ typedef struct ast ast;
 
 ast_node *ast_parse (ast *ctx, lex *lexer);
 
-void *ast_parse_expression (ast *ctx, lex *lexer);
+/* Pass variable node in SUBS and the actual value of the variable will be
+   substituted.
+
+   This is for situations where we assign value of variable with itself. In
+   this case, the previous value needs to be substituted.
+
+   Eg:
+     a := 10;
+     a := a + 2; */
+void *ast_parse_expression (ast *ctx, lex *lexer, ast_node *subs);
 
 void ast_fold (ast *ctx);
 

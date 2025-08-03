@@ -134,7 +134,7 @@ ast_parse (ast *ctx, lex *lexer)
               token = lex_peek (lexer);
               while (!_is_expression_terminator (token))
                 {
-                  exp = ast_parse_expression (ctx, lexer);
+                  exp = ast_parse_expression (ctx, lexer, (void *)0);
                   if (exp)
                     {
                       exp->next = funcall_data->args_head;
@@ -179,7 +179,7 @@ ast_parse (ast *ctx, lex *lexer)
                             "Expected identifier variable.");
               AST_ERROR_IF (token != TOKEN_INFEQ, "Expected ':='");
 
-              exp = ast_parse_expression (ctx, lexer);
+              exp = ast_parse_expression (ctx, lexer, var);
               if (exp)
                 {
                   token = lex_next_token (lexer);
@@ -227,10 +227,11 @@ ast_err_exit:
 }
 
 void *
-ast_parse_expression (ast *ctx, lex *lexer)
+ast_parse_expression (ast *ctx, lex *lexer, ast_node *subs)
 {
   da value_stk = { 0 }, op_stk = { 0 };
   ast_node *new, *node, *var;
+  ast_data_var_declare *var_data;
   long *int_data;
   double *float_data;
   void *ptr;
@@ -274,13 +275,18 @@ ast_parse_expression (ast *ctx, lex *lexer)
         }
       else if (token == TOKEN_IDENTF)
         {
-          // TODO
           if ((ptr = stget (&ctx->ident_table, lexer->str->data)) != (void *)0)
             {
               var = *((ast_node **)ptr);
+
               AST_ERROR_IF (var->type != AST_VAR_DECLARE,
                             "Expected identifier variable.");
-              dapush (&value_stk, var);
+              var_data = var->data;
+
+              if (var_data->value && var == subs)
+                dapush (&value_stk, var_data->value);
+              else
+                dapush (&value_stk, var);
             }
         }
       else if (token == '(')
