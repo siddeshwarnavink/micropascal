@@ -14,6 +14,21 @@
 #define AST_EXPECT_SEMICOLON()                                                \
   AST_ERROR_IF (token != ';', "Expected semicolon (;)");
 
+#define AST_EXPECT_IDENTF()                                                   \
+  do                                                                          \
+    {                                                                         \
+      stringbuilder _err_sb = { 0 };                                          \
+      string *_err;                                                           \
+      sbinit (&_err_sb, &ctx->ar);                                            \
+      sbappend (&_err_sb, "Unknown identifier \"");                           \
+      sbappend (&_err_sb, lexer->str->data);                                  \
+      sbappendch (&_err_sb, '"');                                             \
+      _err = sbflush (&_err_sb);                                              \
+      lex_error (lexer, _err->data);                                          \
+      goto ast_err_exit;                                                      \
+    }                                                                         \
+  while (0);
+
 enum ast_type
 {
   AST_PROGNAME = 0,

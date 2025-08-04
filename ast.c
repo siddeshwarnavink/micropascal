@@ -38,7 +38,8 @@ ast_print_tree (ast_node *root, char *delim)
 ast_node *
 ast_parse (ast *ctx, lex *lexer)
 {
-  ast_node *new, *block = (ast_node *)0, *exp, *var;
+  da block_stk = { 0 };
+  ast_node *new, *blk, *blk2, *exp, *var;
   string *str_data, *str_data2;
   ast_data_var_declare *vd_data;
   ast_data_var_assign *va_data;
@@ -47,6 +48,7 @@ ast_parse (ast *ctx, lex *lexer)
   int token;
   unsigned short found_entry = 0, rvar = 0;
 
+  dainit (&block_stk, &ctx->ar, 16, sizeof (ast_node *));
   htinit (&ctx->ident_table, &ctx->ar, 16, sizeof (ast_node *));
   ctx->root = (void *)0;
 
@@ -54,7 +56,7 @@ ast_parse (ast *ctx, lex *lexer)
   token = lex_next_token (lexer);
   AST_ERROR_IF (token != TOKEN_IDENTF
                     || strcmp (lexer->str->data, "program") != 0,
-                "Expected \"program\" statement.");
+                "Expected \"program\" statement at beginning of program.");
 
   token = lex_next_token (lexer);
   AST_ERROR_IF (token != TOKEN_IDENTF, "Expected program name.");
@@ -73,7 +75,7 @@ ast_parse (ast *ctx, lex *lexer)
       /* Handle var. */
       if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "var") == 0)
         {
-          AST_ERROR_IF (block != (ast_node *)0,
+          AST_ERROR_IF (block_stk.size > 0,
                         "Variable declaration not allowed inside block.");
           rvar = 1;
         }
@@ -82,20 +84,32 @@ ast_parse (ast *ctx, lex *lexer)
       else if (token == TOKEN_IDENTF
                && strcmp (lexer->str->data, "begin") == 0)
         {
-          AST_ERROR_IF (block != (ast_node *)0, "Nested blocks not allowed.");
           rvar = 0;
-          block = _ast_new_node (ctx, AST_BLOCK);
-          block->data = (void *)0;
+          blk = _ast_new_node (ctx, AST_BLOCK);
+          blk->data = (void *)0;
+          daappend (&block_stk, &blk);
         }
 
       /* Handle block end. */
       else if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "end") == 0)
         {
-          AST_ERROR_IF (block == (ast_node *)0, "Invalid use of end.");
-          block->data = reverse_ast_list ((ast_node *)block->data);
-          block->next = ctx->root;
-          ctx->root = block;
-          block = (void *)0;
+          AST_ERROR_IF (block_stk.size == 0, "Invalid use of end.");
+          blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);
+          blk->data = reverse_ast_list ((ast_node *)blk->data);
+
+          if (block_stk.size - 1 == 0)
+            {
+              blk->next = ctx->root;
+              ctx->root = blk;
+            }
+          else
+            {
+              blk2 = *(ast_node **)dageti (&block_stk, block_stk.size - 2);
+              blk->next = blk2->data;
+              blk2->data = blk;
+            }
+
+          dadel (&block_stk, block_stk.size - 1);
         }
 
       /* Handle variable(s) declaration(s). */
@@ -153,7 +167,7 @@ ast_parse (ast *ctx, lex *lexer)
           new->next = ctx->root;
           ctx->root = new;
         }
-      else if (block && token == TOKEN_IDENTF)
+      else if (block_stk.size > 0 && token == TOKEN_IDENTF)
         {
           str_data = stringcpy (&ctx->ar, lexer->str);
           token = lex_next_token (lexer);
@@ -199,8 +213,9 @@ ast_parse (ast *ctx, lex *lexer)
 
               funcall_data->args_head
                   = reverse_ast_list (funcall_data->args_head);
-              new->next = block->data;
-              block->data = new;
+              blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);
+              new->next = blk->data;
+              blk->data = new;
 
               new = (void *)0;
             }
@@ -228,8 +243,9 @@ ast_parse (ast *ctx, lex *lexer)
 
                   va_data->value = exp;
                   new->data = va_data;
-                  new->next = block->data;
-                  block->data = new;
+                  blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);
+                  new->next = blk->data;
+                  blk->data = new;
                 }
               else
                 {
@@ -238,7 +254,7 @@ ast_parse (ast *ctx, lex *lexer)
             }
           else
             {
-              AST_ERROR_IF (1, "Unknown identifier.");
+              AST_EXPECT_IDENTF ();
             }
         }
       else
@@ -262,7 +278,10 @@ ast_parse (ast *ctx, lex *lexer)
   if (ctx->root)
     ctx->root = reverse_ast_list (ctx->root);
 
+  dafold (&block_stk);
   stfold (&ctx->ident_table);
+
+  /* TODO: Report unclosed blocks. */
 
   return ctx->root;
 
@@ -338,8 +357,7 @@ ast_parse_expression (ast *ctx, lex *lexer)
             }
           else
             {
-              printf ("%s\n", lexer->str->data);
-              AST_ERROR_IF (1, "Unknown identifier. ");
+              AST_EXPECT_IDENTF ();
             }
         }
       else if (token == '(')

@@ -80,6 +80,11 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
     {
       switch (ptr->type)
         {
+        case AST_BLOCK:
+          sbappend (&ctx->sb, "{\n");
+          _codegen_cc_parse (ctx, ptr->data);
+          sbappend (&ctx->sb, "\n}");
+          break;
         case AST_MAIN_BLOCK:
           sbappend (&ctx->sb, "int main() {\n");
 
