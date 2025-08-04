@@ -3,6 +3,24 @@
 
 #include "lexer.h"
 
+#define AST_APPEND_TO_BLOCK()                                                 \
+  do                                                                          \
+    {                                                                         \
+      if (cond)                                                               \
+        {                                                                     \
+          ((ast_data_cond *)cond->data)->yes = new;                           \
+          cond = (void *)0;                                                   \
+        }                                                                     \
+      else                                                                    \
+        {                                                                     \
+          blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);        \
+          blk_data = blk->data;                                               \
+          new->next = blk_data->next;                                         \
+          blk_data->next = new;                                               \
+        }                                                                     \
+    }                                                                         \
+  while (0);
+
 #define AST_ERROR_IF(cond, msg)                                               \
   if ((cond))                                                                 \
     {                                                                         \
@@ -41,7 +59,8 @@ enum ast_type
   AST_FLOATLIT,
   AST_INTLIT,
   AST_BOOL,
-  AST_OP
+  AST_OP,
+  AST_COND
 };
 
 struct ast_node
@@ -67,6 +86,13 @@ struct ast_data_var_assign
 };
 typedef struct ast_data_var_assign ast_data_var_assign;
 
+struct ast_data_block
+{
+  unsigned short appended;
+  ast_node *next;
+};
+typedef struct ast_data_block ast_data_block;
+
 struct ast_data_funcall
 {
   string *name;
@@ -81,6 +107,14 @@ struct ast_data_op
   void *right;
 };
 typedef struct ast_data_op ast_data_op;
+
+struct ast_data_cond
+{
+  ast_node *cond;
+  ast_node *yes;
+  ast_node *no;
+};
+typedef struct ast_data_cond ast_data_cond;
 
 struct ast
 {

@@ -128,22 +128,11 @@ lex_next_token (lex *ctx)
             }
 
           ++ctx->pos;
-          if (ctx->sb.size > 0)
-            {
-              ctx->str = sbflush (&ctx->sb);
-              return TOKEN_IDENTF;
-            }
-          sbreset (&ctx->sb);
+          LEX_FLUSH_IDENTF ();
         }
       else if (_is_symbol (ctx->src->data[ctx->pos]))
         {
-          if (ctx->sb.size > 0)
-            {
-              ctx->str = sbflush (&ctx->sb);
-              return TOKEN_IDENTF;
-            }
-
-          sbreset (&ctx->sb);
+          LEX_FLUSH_IDENTF ();
 
           if (!rstr && ctx->src->data[ctx->pos] == '\'')
             {
@@ -296,7 +285,7 @@ _is_symbol (char ch)
   return ch == ',' || ch == ':' || ch == '=' || ch == '.' || ch == '('
          || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}'
          || ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%'
-         || ch == ';' || ch == '\'' || ch == '!';
+         || ch == ';' || ch == '\'' || ch == '!' || ch == '>' || ch == '<';
 }
 
 static unsigned int

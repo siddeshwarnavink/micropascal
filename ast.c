@@ -39,11 +39,13 @@ ast_node *
 ast_parse (ast *ctx, lex *lexer)
 {
   da block_stk = { 0 };
-  ast_node *new, *blk, *blk2, *exp, *var;
+  ast_node *new, *blk, *blk2, *exp, *var, *cond = (void *)0;
   string *str_data, *str_data2;
   ast_data_var_declare *vd_data;
   ast_data_var_assign *va_data;
   ast_data_funcall *funcall_data;
+  ast_data_cond *cond_data;
+  ast_data_block *blk_data, *blk_data2;
   void *ptr;
   int token;
   unsigned short found_entry = 0, rvar = 0;
@@ -86,7 +88,17 @@ ast_parse (ast *ctx, lex *lexer)
         {
           rvar = 0;
           blk = _ast_new_node (ctx, AST_BLOCK);
-          blk->data = (void *)0;
+          blk_data = aralloc (&ctx->ar, sizeof (ast_data_block));
+          blk_data->appended = 0;
+          blk->data = blk_data;
+
+          if (cond)
+            {
+              ((ast_data_cond *)cond->data)->yes = blk;
+              blk_data->appended = 1;
+              cond = (void *)0;
+            }
+
           daappend (&block_stk, &blk);
         }
 
@@ -95,20 +107,23 @@ ast_parse (ast *ctx, lex *lexer)
         {
           AST_ERROR_IF (block_stk.size == 0, "Invalid use of end.");
           blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);
-          blk->data = reverse_ast_list ((ast_node *)blk->data);
+          blk_data = blk->data;
+          blk_data->next = reverse_ast_list (blk_data->next);
 
           if (block_stk.size - 1 == 0)
             {
               blk->next = ctx->root;
               ctx->root = blk;
             }
-          else
+          else if (!blk_data->appended)
             {
               blk2 = *(ast_node **)dageti (&block_stk, block_stk.size - 2);
-              blk->next = blk2->data;
-              blk2->data = blk;
+              blk_data2 = blk2->data;
+              blk->next = blk_data2->next;
+              blk_data2->next = blk;
             }
 
+          blk_data->appended = 1;
           dadel (&block_stk, block_stk.size - 1);
         }
 
@@ -170,6 +185,31 @@ ast_parse (ast *ctx, lex *lexer)
       else if (block_stk.size > 0 && token == TOKEN_IDENTF)
         {
           str_data = stringcpy (&ctx->ar, lexer->str);
+
+          /* IF condition */
+          if (strcmp (str_data->data, "if") == 0)
+            {
+              new = _ast_new_node (ctx, AST_COND);
+              cond_data = aralloc (&ctx->ar, sizeof (ast_data_cond));
+              exp = ast_parse_expression (ctx, lexer);
+              if (exp)
+                {
+                  cond_data->cond = exp;
+                  token = lex_next_token (lexer);
+                  AST_ERROR_IF (token != TOKEN_THEN,
+                                "Expected \"then\" after condition.");
+                }
+              else
+                {
+                  AST_ERROR_IF (1, "Expected condition expression.");
+                }
+
+              new->data = cond_data;
+              AST_APPEND_TO_BLOCK ();
+              cond = new;
+              continue;
+            }
+
           token = lex_next_token (lexer);
 
           /* Function call */
@@ -213,11 +253,7 @@ ast_parse (ast *ctx, lex *lexer)
 
               funcall_data->args_head
                   = reverse_ast_list (funcall_data->args_head);
-              blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);
-              new->next = blk->data;
-              blk->data = new;
-
-              new = (void *)0;
+              AST_APPEND_TO_BLOCK ();
             }
           /* Variable assignment. */
           else if ((ptr = stget (&ctx->ident_table, str_data->data))
@@ -243,9 +279,7 @@ ast_parse (ast *ctx, lex *lexer)
 
                   va_data->value = exp;
                   new->data = va_data;
-                  blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);
-                  new->next = blk->data;
-                  blk->data = new;
+                  AST_APPEND_TO_BLOCK ();
                 }
               else
                 {
@@ -422,6 +456,9 @@ ast_parse_expression (ast *ctx, lex *lexer)
       if (lex_peek (lexer) == ')' && op_stk.size == 0)
         break;
 
+      if (lex_peek (lexer) == TOKEN_THEN)
+        break;
+
       token = lex_next_token (lexer);
     }
 
@@ -523,13 +560,14 @@ _ast_print_node (ast_node *n)
   ast_data_funcall *funcall_data;
   ast_data_var_declare *vd_data;
   ast_data_var_assign *va_data;
+  ast_data_cond *cond_data;
+  ast_data_block *blk_data;
 
   switch (n->type)
     {
     case AST_PROGNAME:
       printf ("(program %s)", ((string *)n->data)->data);
       break;
-
     case AST_VAR_ASSIGN:
       va_data = n->data;
       vd_data = va_data->var->data;
@@ -537,7 +575,6 @@ _ast_print_node (ast_node *n)
       _ast_print_node (va_data->value);
       printf (")");
       break;
-
     case AST_VAR_DECLARE:
       vd_data = n->data;
       printf ("(var %s ", vd_data->name->data);
@@ -545,13 +582,24 @@ _ast_print_node (ast_node *n)
       printf (")");
       break;
     case AST_MAIN_BLOCK:
+      blk_data = n->data;
       printf ("(main-block\n  ");
-      ast_print_tree ((ast_node *)n->data, "\n  ");
+      ast_print_tree (blk_data->next, "\n  ");
+      printf (")");
+      break;
+    case AST_COND:
+      cond_data = n->data;
+      printf ("(if ");
+      _ast_print_node (cond_data->cond);
+      printf ("\n");
+      if (cond_data->yes)
+        ast_print_tree (cond_data->yes, "\n  ");
       printf (")");
       break;
     case AST_BLOCK:
+      blk_data = n->data;
       printf ("(block\n  ");
-      ast_print_tree ((ast_node *)n->data, "\n  ");
+      ast_print_tree (blk_data->next, "\n  ");
       printf (")");
       break;
     case AST_FUNCALL:
@@ -578,10 +626,8 @@ _ast_print_node (ast_node *n)
           _ast_print_node (op_data->left);
           printf (" ");
         }
-
       if (op_data->right)
         _ast_print_node (op_data->right);
-
       printf (")");
       break;
     default:
@@ -593,7 +639,9 @@ _ast_print_node (ast_node *n)
 static int
 _is_token_op (int tok)
 {
-  return tok == '+' || tok == '-' || tok == '*' || tok == '/' || tok == '!';
+  return tok == '+' || tok == '-' || tok == '*' || tok == '/' || tok == '!'
+         || tok == '>' || tok == '<' || tok == TOKEN_GEQ || tok == TOKEN_LEQ
+         || tok == TOKEN_NEQ;
 }
 
 static int

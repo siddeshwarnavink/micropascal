@@ -12,6 +12,20 @@
       return (token);                                                         \
     }
 
+#define LEX_FLUSH_IDENTF()                                                    \
+  do                                                                          \
+    {                                                                         \
+      if (ctx->sb.size > 0)                                                   \
+        {                                                                     \
+          ctx->str = sbflush (&ctx->sb);                                      \
+          if (strcmp (ctx->str->data, "then") == 0)                           \
+            return TOKEN_THEN;                                                \
+          return TOKEN_IDENTF;                                                \
+        }                                                                     \
+      sbreset (&ctx->sb);                                                     \
+    }                                                                         \
+  while (0);
+
 struct lex
 {
   arena ar;
@@ -38,6 +52,7 @@ enum lex_token
   TOKEN_GEQ,
   TOKEN_LEQ,
   TOKEN_NEQ,
+  TOKEN_THEN
 };
 
 int lex_init (lex *ctx, char *path);
