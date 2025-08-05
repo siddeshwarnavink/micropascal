@@ -48,7 +48,7 @@ ast_parse (ast *ctx, lex *lexer)
   ast_data_block *blk_data, *blk_data2;
   void *ptr;
   int token;
-  unsigned short found_entry = 0, rvar = 0;
+  unsigned short found_entry = 0, rvar = 0, cond_else = 0;
 
   dainit (&block_stk, &ctx->ar, 16, sizeof (ast_node *));
   htinit (&ctx->ident_table, &ctx->ar, 16, sizeof (ast_node *));
@@ -74,6 +74,15 @@ ast_parse (ast *ctx, lex *lexer)
 
   while ((token = lex_next_token (lexer)) != TOKEN_END)
     {
+      if (token == TOKEN_ELSE)
+        {
+          if (!cond)
+            AST_ERROR_IF (1, "Invalid usage of \"else\".");
+
+          cond_else = 1;
+          continue;
+        }
+
       /* Handle var. */
       if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "var") == 0)
         {
@@ -94,12 +103,22 @@ ast_parse (ast *ctx, lex *lexer)
 
           if (cond)
             {
-              ((ast_data_cond *)cond->data)->yes = blk;
+              cond_data = cond->data;
+              if (!cond_data->yes)
+                {
+                  cond_data->yes = blk;
+                }
+              else
+                {
+                  cond_data->no = blk;
+                  cond = (void *)0;
+                  cond_else = 0;
+                }
               blk_data->appended = 1;
-              cond = (void *)0;
             }
 
           daappend (&block_stk, &blk);
+          continue;
         }
 
       /* Handle block end. */
@@ -192,6 +211,7 @@ ast_parse (ast *ctx, lex *lexer)
               new = _ast_new_node (ctx, AST_COND);
               cond_data = aralloc (&ctx->ar, sizeof (ast_data_cond));
               exp = ast_parse_expression (ctx, lexer);
+              cond_else = 0;
               if (exp)
                 {
                   cond_data->cond = exp;
@@ -249,7 +269,8 @@ ast_parse (ast *ctx, lex *lexer)
                   token = lex_peek (lexer);
                 }
 
-              AST_EXPECT_SEMICOLON ();
+              if (!(cond && token == TOKEN_ELSE))
+                AST_EXPECT_SEMICOLON ();
 
               funcall_data->args_head
                   = reverse_ast_list (funcall_data->args_head);
@@ -591,9 +612,14 @@ _ast_print_node (ast_node *n)
       cond_data = n->data;
       printf ("(if ");
       _ast_print_node (cond_data->cond);
-      printf ("\n");
+      printf ("\n    ");
       if (cond_data->yes)
         ast_print_tree (cond_data->yes, "\n  ");
+      if (cond_data->no)
+        {
+          printf ("\n    ");
+          ast_print_tree (cond_data->no, "\n  ");
+        }
       printf (")");
       break;
     case AST_BLOCK:

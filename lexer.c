@@ -47,6 +47,8 @@ lex_next_token (lex *ctx)
   char *num;
   unsigned short rcomment = 0, rstr = 0, rint = 0, rfloat = 0;
 
+  /* TODO: Add support for inline comment. */
+
   if (ctx->str && ctx->str->size > 0)
     {
       arfree (ctx->str->data);
@@ -59,11 +61,8 @@ lex_next_token (lex *ctx)
 
       if (rcomment)
         {
-          if (ctx->pos + 1 < ctx->src->size
-              && ctx->src->data[ctx->src->size] == '*'
-              && ctx->src->data[ctx->pos + 1] == ')')
+          if (ctx->src->data[ctx->pos] == '}')
             {
-              ++ctx->pos;
               rcomment = 0;
             }
           ++ctx->pos;
@@ -141,15 +140,14 @@ lex_next_token (lex *ctx)
               continue;
             }
 
+          if (ctx->src->data[ctx->pos] == '{')
+            {
+              rcomment = 1;
+              continue;
+            }
+
           if (ctx->pos + 1 < ctx->src->size)
             {
-              if (ctx->src->data[ctx->pos] == '('
-                  && ctx->src->data[ctx->pos + 1] == '*')
-                {
-                  rcomment = 1;
-                  continue;
-                }
-
               LEX_HANDLE_OP (ctx, ':', '=', TOKEN_INFEQ);
               LEX_HANDLE_OP (ctx, '>', '=', TOKEN_GEQ);
               LEX_HANDLE_OP (ctx, '<', '=', TOKEN_LEQ);
@@ -200,6 +198,12 @@ lex_print_token (lex *ctx, int tok)
   printf ("token - ");
   switch (tok)
     {
+    case TOKEN_THEN:
+      printf ("TOKEN_THEN");
+      break;
+    case TOKEN_ELSE:
+      printf ("TOKEN_ELSE");
+      break;
     case TOKEN_END:
       printf ("TOKEN_END");
       break;

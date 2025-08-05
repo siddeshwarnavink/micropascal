@@ -74,6 +74,7 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
   ast_data_var_declare *var;
   ast_data_var_assign *va_data;
   ast_data_cond *cond_data;
+  ast_data_block *blk_data;
   char buf[32];
   int i;
 
@@ -88,13 +89,20 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
           sbappendch (&ctx->sb, ')');
           if (cond_data->yes)
             _codegen_cc_parse (ctx, cond_data->yes);
+          if (cond_data->no)
+            {
+              sbappend (&ctx->sb, "else ");
+              _codegen_cc_parse (ctx, cond_data->no);
+            }
           break;
         case AST_BLOCK:
+          blk_data = ptr->data;
           sbappend (&ctx->sb, "{\n");
-          _codegen_cc_parse (ctx, ptr->data);
+          _codegen_cc_parse (ctx, blk_data->next);
           sbappend (&ctx->sb, "\n}");
           break;
         case AST_MAIN_BLOCK:
+          blk_data = ptr->data;
           sbappend (&ctx->sb, "int main() {\n");
 
           for (i = ctx->var_declares.size - 1; i >= 0; --i)
@@ -134,7 +142,7 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
               sbappend (&ctx->sb, ";\n");
             }
 
-          _codegen_cc_parse (ctx, ptr->data);
+          _codegen_cc_parse (ctx, blk_data->next);
           sbappend (&ctx->sb, "return 0;\n");
           sbappend (&ctx->sb, "}\n");
           break;

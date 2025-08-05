@@ -20,6 +20,8 @@
           ctx->str = sbflush (&ctx->sb);                                      \
           if (strcmp (ctx->str->data, "then") == 0)                           \
             return TOKEN_THEN;                                                \
+          else if (strcmp (ctx->str->data, "else") == 0)                      \
+            return TOKEN_ELSE;                                                \
           return TOKEN_IDENTF;                                                \
         }                                                                     \
       sbreset (&ctx->sb);                                                     \
@@ -52,7 +54,8 @@ enum lex_token
   TOKEN_GEQ,
   TOKEN_LEQ,
   TOKEN_NEQ,
-  TOKEN_THEN
+  TOKEN_THEN,
+  TOKEN_ELSE
 };
 
 int lex_init (lex *ctx, char *path);

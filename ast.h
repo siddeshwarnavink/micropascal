@@ -8,8 +8,26 @@
     {                                                                         \
       if (cond)                                                               \
         {                                                                     \
-          ((ast_data_cond *)cond->data)->yes = new;                           \
-          cond = (void *)0;                                                   \
+          cond_data = cond->data;                                             \
+          if (!cond_data->yes)                                                \
+            {                                                                 \
+              cond_data->yes = new;                                           \
+            }                                                                 \
+          else if (cond_data->yes && !cond_else)                              \
+            {                                                                 \
+              blk_data = cond_data->yes->data;                                \
+              new->next = blk_data->next;                                     \
+              blk_data->next = new;                                           \
+            }                                                                 \
+          else if (cond_else)                                                 \
+            {                                                                 \
+              if (cond_else)                                                  \
+                {                                                             \
+                  cond_data->no = new;                                        \
+                  cond_else = 0;                                              \
+                }                                                             \
+              cond = (void *)0;                                               \
+            }                                                                 \
         }                                                                     \
       else                                                                    \
         {                                                                     \
