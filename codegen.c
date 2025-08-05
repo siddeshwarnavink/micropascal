@@ -75,6 +75,7 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
   ast_data_var_assign *va_data;
   ast_data_cond *cond_data;
   ast_data_block *blk_data;
+  ast_data_while *while_data;
   char buf[32];
   int i;
 
@@ -82,6 +83,14 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
     {
       switch (ptr->type)
         {
+        case AST_WHILE:
+          while_data = ptr->data;
+          sbappend (&ctx->sb, "while(");
+          _parse_exp (ctx, while_data->cond);
+          sbappendch (&ctx->sb, ')');
+          if (while_data->next)
+            _codegen_cc_parse (ctx, while_data->next);
+          break;
         case AST_COND:
           cond_data = ptr->data;
           sbappend (&ctx->sb, "if(");

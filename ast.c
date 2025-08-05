@@ -39,12 +39,13 @@ ast_node *
 ast_parse (ast *ctx, lex *lexer)
 {
   da block_stk = { 0 };
-  ast_node *new, *blk, *blk2, *exp, *var, *cond = (void *)0;
+  ast_node *new, *blk, *blk2, *exp, *var, *cond = (void *)0, *loop = (void *)0;
   string *str_data, *str_data2;
   ast_data_var_declare *vd_data;
   ast_data_var_assign *va_data;
   ast_data_funcall *funcall_data;
   ast_data_cond *cond_data;
+  ast_data_while *while_data;
   ast_data_block *blk_data, *blk_data2;
   void *ptr;
   int token;
@@ -101,7 +102,14 @@ ast_parse (ast *ctx, lex *lexer)
           blk_data->appended = 0;
           blk->data = blk_data;
 
-          if (cond)
+          if (loop)
+            {
+              while_data = loop->data;
+              while_data->next = blk;
+              blk_data->appended = 1;
+              loop = (void *)0;
+            }
+          else if (cond)
             {
               cond_data = cond->data;
               if (!cond_data->yes)
@@ -205,8 +213,31 @@ ast_parse (ast *ctx, lex *lexer)
         {
           str_data = stringcpy (&ctx->ar, lexer->str);
 
+          /* WHILE loop */
+          if (strcmp (str_data->data, "while") == 0)
+            {
+              new = _ast_new_node (ctx, AST_WHILE);
+              while_data = aralloc (&ctx->ar, sizeof (ast_data_while));
+              exp = ast_parse_expression (ctx, lexer);
+              if (exp)
+                {
+                  while_data->cond = exp;
+                  token = lex_next_token (lexer);
+                  AST_ERROR_IF (token != TOKEN_DO,
+                                "Expected \"do\" after while.");
+                }
+              else
+                {
+                  AST_ERROR_IF (1, "Expected condition expression.");
+                }
+
+              new->data = while_data;
+              AST_APPEND_TO_BLOCK ();
+              loop = new;
+              continue;
+            }
           /* IF condition */
-          if (strcmp (str_data->data, "if") == 0)
+          else if (strcmp (str_data->data, "if") == 0)
             {
               new = _ast_new_node (ctx, AST_COND);
               cond_data = aralloc (&ctx->ar, sizeof (ast_data_cond));
@@ -477,7 +508,7 @@ ast_parse_expression (ast *ctx, lex *lexer)
       if (lex_peek (lexer) == ')' && op_stk.size == 0)
         break;
 
-      if (lex_peek (lexer) == TOKEN_THEN)
+      if (lex_peek (lexer) == TOKEN_THEN || lex_peek (lexer) == TOKEN_DO)
         break;
 
       token = lex_next_token (lexer);
@@ -583,6 +614,7 @@ _ast_print_node (ast_node *n)
   ast_data_var_assign *va_data;
   ast_data_cond *cond_data;
   ast_data_block *blk_data;
+  ast_data_while *while_data;
 
   switch (n->type)
     {
@@ -606,6 +638,14 @@ _ast_print_node (ast_node *n)
       blk_data = n->data;
       printf ("(main-block\n  ");
       ast_print_tree (blk_data->next, "\n  ");
+      printf (")");
+      break;
+    case AST_WHILE:
+      while_data = n->data;
+      printf ("(while ");
+      _ast_print_node (while_data->cond);
+      printf ("\n    ");
+      ast_print_tree (while_data->next, "\n  ");
       printf (")");
       break;
     case AST_COND:

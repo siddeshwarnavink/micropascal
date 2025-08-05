@@ -6,7 +6,13 @@
 #define AST_APPEND_TO_BLOCK()                                                 \
   do                                                                          \
     {                                                                         \
-      if (cond)                                                               \
+      if (loop)                                                               \
+        {                                                                     \
+          while_data = loop->data;                                            \
+          while_data->next = new;                                             \
+          loop = (void *)0;                                                   \
+        }                                                                     \
+      else if (cond)                                                          \
         {                                                                     \
           cond_data = cond->data;                                             \
           if (!cond_data->yes)                                                \
@@ -78,7 +84,8 @@ enum ast_type
   AST_INTLIT,
   AST_BOOL,
   AST_OP,
-  AST_COND
+  AST_COND,
+  AST_WHILE
 };
 
 struct ast_node
@@ -133,6 +140,13 @@ struct ast_data_cond
   ast_node *no;
 };
 typedef struct ast_data_cond ast_data_cond;
+
+struct ast_data_while
+{
+  ast_node *cond;
+  ast_node *next;
+};
+typedef struct ast_data_while ast_data_while;
 
 struct ast
 {

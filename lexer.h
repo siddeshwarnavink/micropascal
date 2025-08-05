@@ -22,6 +22,8 @@
             return TOKEN_THEN;                                                \
           else if (strcmp (ctx->str->data, "else") == 0)                      \
             return TOKEN_ELSE;                                                \
+          else if (strcmp (ctx->str->data, "do") == 0)                        \
+            return TOKEN_DO;                                                  \
           return TOKEN_IDENTF;                                                \
         }                                                                     \
       sbreset (&ctx->sb);                                                     \
@@ -55,7 +57,8 @@ enum lex_token
   TOKEN_LEQ,
   TOKEN_NEQ,
   TOKEN_THEN,
-  TOKEN_ELSE
+  TOKEN_ELSE,
+  TOKEN_DO
 };
 
 int lex_init (lex *ctx, char *path);
