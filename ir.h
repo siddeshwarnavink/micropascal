@@ -1,0 +1,61 @@
+#ifndef IR_H
+#define IR_H
+
+#include "ast.h"
+
+enum ir_optype
+{
+  IR_DECLARE = 0,
+  IR_ASSIGN,
+  IR_ASSIGN_ADD,
+  IR_ADD,
+  IR_CALL,
+  IR_LABEL
+};
+
+enum ir_operand_type
+{
+  IR_OP_VAR = 0,
+  IR_OP_LABEL,
+  IR_OP_CONST_INT,
+  IR_OP_CONST_STR,
+};
+
+struct ir_operand
+{
+  unsigned short type;
+  union
+  {
+    char *str_data;
+    unsigned long int_data;
+  };
+};
+typedef struct ir_operand ir_operand;
+
+struct ir_tac
+{
+  unsigned short op;
+  ir_operand *a;
+  ir_operand *b;
+  ir_operand *c;
+  struct ir_tac *next;
+};
+typedef struct ir_tac ir_tac;
+
+struct ir
+{
+  arena ar;
+  stringbuilder sb;
+  ht var_table;
+  da ops;
+  unsigned int tempvar_count;
+};
+typedef struct ir ir;
+
+void ir_init (ir *ctx, ast_node *root);
+
+void ir_print (ir *ctx);
+
+void ir_fold (ir *ctx);
+
+#endif /* not IR_H */

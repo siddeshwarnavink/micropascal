@@ -3,6 +3,7 @@
 #define CLOMY_IMPLEMENTATION
 #include "clomy.h"
 
+#include "ir.h"
 #include "codegen.h"
 
 int compiler_main (char *path, unsigned short debug, unsigned short target);
@@ -24,6 +25,10 @@ main (int argc, char **argv)
               if (strcmp (argv[i], "ast") == 0)
                 {
                   target = TARGET_AST;
+                }
+              else if (strcmp (argv[i], "ir") == 0)
+                {
+                  target = TARGET_IR;
                 }
               else if (strcmp (argv[i], "c") == 0)
                 {
@@ -74,6 +79,7 @@ compiler_main (char *path, unsigned short debug, unsigned short target)
   ast tree = { 0 };
   cg cgctx = { 0 };
   ast_node *root;
+  ir tac = { 0 };
   string *code;
   FILE *f;
   int token;
@@ -102,6 +108,12 @@ compiler_main (char *path, unsigned short debug, unsigned short target)
       ast_print_tree (tree.root, "\n");
       printf ("\n");
     }
+  else if (target == TARGET_IR)
+    {
+      ir_init (&tac, tree.root);
+      ir_print (&tac);
+      ir_fold (&tac);
+    }
   else
     {
       code = codegen (&cgctx, root);
@@ -123,6 +135,6 @@ void
 usage (char *prog)
 {
   fprintf (stderr, "Usage: %s [FILE] [FLAGS]\n", prog);
-  fprintf (stderr, "    -t     target (ast, c)\n");
+  fprintf (stderr, "    -t     target (ast, ir, c)\n");
   fprintf (stderr, "    -d     show debug\n");
 }
