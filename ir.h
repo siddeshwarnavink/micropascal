@@ -8,6 +8,9 @@ enum ir_optype
   IR_DECLARE = 0,
   IR_ASSIGN,
   IR_ASSIGN_ADD,
+  IR_ASSIGN_SUB,
+  IR_ASSIGN_MUL,
+  IR_ASSIGN_DIV,
   IR_ADD,
   IR_CALL,
   IR_LABEL

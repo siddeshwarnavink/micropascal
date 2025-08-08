@@ -5,6 +5,8 @@ static ir_tac *_new_tac (ir *ctx, unsigned short op);
 static ir_operand *_new_op (ir *ctx, unsigned int type);
 static void _ir_var_assign (ir *ctx, ast_node *n);
 static ir_operand *_to_ir_type (ir *ctx, ast_node *n);
+static unsigned short _op_ast_to_ir (ast_node *n);
+static ir_operand *_temp_var (ir *ctx, ast_node *n);
 static void _print_exp (ir_operand *op);
 static void _print_op (ir_tac *itm);
 static char *_ir_datatype (ir_operand *op);
@@ -122,11 +124,27 @@ _ir_var_assign (ir *ctx, ast_node *n)
         case '+':
           new = _new_tac (ctx, IR_ASSIGN_ADD);
           break;
+        case '-':
+          new = _new_tac (ctx, IR_ASSIGN_SUB);
+          break;
+        case '*':
+          new = _new_tac (ctx, IR_ASSIGN_MUL);
+          break;
+        case '/':
+          new = _new_tac (ctx, IR_ASSIGN_DIV);
+          break;
         }
       new->a = _new_op (ctx, IR_OP_VAR);
       new->a->str_data = vard_data->name->data;
-      new->b = _to_ir_type (ctx, op_data->left);
-      new->c = _to_ir_type (ctx, op_data->right);
+      if (((ast_node *)op_data->left)->type == AST_OP)
+        new->b = _temp_var (ctx, op_data->left);
+      else
+        new->b = _to_ir_type (ctx, op_data->left);
+
+      if (((ast_node *)op_data->right)->type == AST_OP)
+        new->c = _temp_var (ctx, op_data->right);
+      else
+        new->c = _to_ir_type (ctx, op_data->right);
     }
   else
     {
@@ -160,6 +178,32 @@ _print_op (ir_tac *itm)
       printf (" + ");
       _print_exp (itm->c);
       printf ("\n");
+      break;
+    case IR_ASSIGN_SUB:
+      printf ("  %s = ", itm->a->str_data);
+      _print_exp (itm->b);
+      printf (" - ");
+      _print_exp (itm->c);
+      printf ("\n");
+      break;
+    case IR_ASSIGN_MUL:
+      printf ("  %s = ", itm->a->str_data);
+      _print_exp (itm->b);
+      printf (" * ");
+      _print_exp (itm->c);
+      printf ("\n");
+      break;
+    case IR_ASSIGN_DIV:
+      printf ("  %s = ", itm->a->str_data);
+      _print_exp (itm->b);
+      printf (" / ");
+      _print_exp (itm->c);
+      printf ("\n");
+      break;
+
+    default:
+      printf ("%d?\n", itm->op);
+      break;
     }
 }
 
@@ -180,6 +224,58 @@ _print_exp (ir_operand *op)
     default:
       printf ("%d?", op->type);
       break;
+    }
+}
+
+ir_operand *
+_temp_var (ir *ctx, ast_node *n)
+{
+  ast_data_op *op_data = n->data;
+  ir_tac *new = _new_tac (ctx, _op_ast_to_ir (n));
+  string *var_name;
+
+  sbappendch (&ctx->sb, 't');
+  sbappendch (&ctx->sb, (char)(ctx->tempvar_count++ + '0'));
+  var_name = sbflush (&ctx->sb);
+
+  new->a = _new_op (ctx, IR_OP_VAR);
+  new->a->str_data = var_name->data;
+
+  if (((ast_node *)op_data->left)->type == AST_OP)
+    new->b = _temp_var (ctx, op_data->left);
+  else
+    new->b = _to_ir_type (ctx, op_data->left);
+
+  if (((ast_node *)op_data->right)->type == AST_OP)
+    new->c = _temp_var (ctx, op_data->right);
+  else
+    new->c = _to_ir_type (ctx, op_data->right);
+
+  daappend (&ctx->ops, &new);
+
+  return new->a;
+}
+
+unsigned short
+_op_ast_to_ir (ast_node *n)
+{
+  ast_data_op *op_data = n->data;
+
+  if (n->type != AST_OP)
+    return IR_ASSIGN;
+
+  switch (op_data->op)
+    {
+    case '+':
+      return IR_ASSIGN_ADD;
+    case '-':
+      return IR_ASSIGN_SUB;
+    case '*':
+      return IR_ASSIGN_MUL;
+    case '/':
+      return IR_ASSIGN_DIV;
+    default:
+      return IR_ASSIGN;
     }
 }
 
