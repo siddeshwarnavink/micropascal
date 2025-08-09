@@ -5,7 +5,8 @@ var
   b: integer;
   c: integer;
   d: integer;
-  e: integer;
+  e: real;
+  f: real;
 begin
   a := 1+2*3+4;
   a := 12;
@@ -13,4 +14,8 @@ begin
   c := 20;
   d := a + b + c;
   writeln('%d', d);
+  f := 35.35;
+  e := 34.34;
+  f := f + e;
+  writeln('%f', f);
 end.
