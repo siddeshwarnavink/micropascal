@@ -1,6 +1,8 @@
 #include "ir.h"
 
-void _ir_parse (ir *ctx, ast_node *root);
+static void _ir_parse (ir *ctx, ast_node *root);
+static unsigned short _is_assign (ir_tac *n);
+static void _ir_eval_optimize (ir *ctx);
 static ir_tac *_new_tac (ir *ctx, unsigned short op);
 static ir_operand *_new_op (ir *ctx, unsigned int type);
 static void _ir_var_assign (ir *ctx, ast_node *n);
@@ -17,6 +19,87 @@ ir_init (ir *ctx, ast_node *root)
   dainit (&ctx->ops, &ctx->ar, sizeof (ir_tac *), 64);
   htinit (&ctx->var_table, &ctx->ar, 16, sizeof (ir_tac *));
   _ir_parse (ctx, root);
+  ir_print (ctx);
+  _ir_eval_optimize (ctx);
+}
+
+void
+_ir_eval_optimize (ir *ctx)
+{
+  ir_tac *ptr;
+  unsigned int i;
+  long int_data;
+
+  ht known_intvar = { 0 }, visited_var = { 0 };
+  htinit (&known_intvar, &ctx->ar, 64, sizeof (long));
+  htinit (&visited_var, &ctx->ar, 64, sizeof (short));
+
+  /* TODO: Support for datatype other than integer. */
+
+  /* Compile Time Evaluation. */
+  for (i = 0; i < ctx->ops.size; ++i)
+    {
+      ptr = *(ir_tac **)dageti (&ctx->ops, i);
+
+      if (_is_assign (ptr))
+        {
+          /* Value of B is already known. */
+          if (ptr->b && ptr->b->type == IR_OP_VAR
+              && stget (&known_intvar, ptr->b->str_data))
+            {
+              int_data = *(long *)stget (&known_intvar, ptr->b->str_data);
+              ptr->b = _new_op (ctx, IR_OP_CONST_INT);
+              ptr->b->int_data = int_data;
+            }
+
+          /* Value of C is already known. */
+          if (ptr->c && ptr->c->type == IR_OP_VAR
+              && stget (&known_intvar, ptr->c->str_data))
+            {
+              int_data = *(long *)stget (&known_intvar, ptr->c->str_data);
+              ptr->c = _new_op (ctx, IR_OP_CONST_INT);
+              ptr->c->int_data = int_data;
+            }
+
+          /* Static value. */
+          if (ptr->op == IR_ASSIGN)
+            {
+              int_data = ptr->b->int_data;
+              stput (&known_intvar, ptr->a->str_data, &int_data);
+            }
+          /* Static expression. */
+          else if (ptr->b && ptr->b->type != IR_OP_VAR && ptr->c
+                   && ptr->c->type != IR_OP_VAR)
+            {
+              switch (ptr->op)
+                {
+                case IR_ASSIGN_ADD:
+                  int_data = ptr->b->int_data + ptr->c->int_data;
+                  stput (&known_intvar, ptr->a->str_data, &int_data);
+                  break;
+                case IR_ASSIGN_SUB:
+                  int_data = ptr->b->int_data - ptr->c->int_data;
+                  stput (&known_intvar, ptr->a->str_data, &int_data);
+                  break;
+                case IR_ASSIGN_MUL:
+                  int_data = ptr->b->int_data * ptr->c->int_data;
+                  stput (&known_intvar, ptr->a->str_data, &int_data);
+                  break;
+                case IR_ASSIGN_DIV:
+                  int_data = ptr->b->int_data / ptr->c->int_data;
+                  stput (&known_intvar, ptr->a->str_data, &int_data);
+                }
+              ptr->op = IR_ASSIGN;
+              ptr->b = _new_op (ctx, IR_OP_CONST_INT);
+              ptr->b->int_data = int_data;
+              arfree (ptr->c);
+              ptr->c = (void *)0;
+            }
+        }
+    }
+
+  stfold (&known_intvar);
+  stfold (&visited_var);
 }
 
 void
@@ -314,4 +397,11 @@ _ir_datatype (ir_operand *op)
     default:
       return "unk";
     }
+}
+
+unsigned short
+_is_assign (ir_tac *n)
+{
+  return n->op == IR_ASSIGN || n->op == IR_ASSIGN_ADD || n->op == IR_ASSIGN_SUB
+         || n->op == IR_ASSIGN_MUL || n->op == IR_ASSIGN_DIV;
 }

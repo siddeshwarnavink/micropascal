@@ -12,4 +12,5 @@ begin
   b := 15;
   c := 20;
   d := a + b + c;
+  writeln('%d', d);
 end.
