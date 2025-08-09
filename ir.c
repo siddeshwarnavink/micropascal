@@ -1,11 +1,14 @@
 #include "ir.h"
 
+static unsigned short _ir_expr_datatype (ir *ctx, ir_operand *itm);
+static void _ir_print_vartable (ir *ctx);
 static void _ir_parse (ir *ctx, ast_node *root);
 static unsigned short _is_assign (ir_tac *n);
 static void _ir_eval_optimize (ir *ctx);
 static ir_tac *_new_tac (ir *ctx, unsigned short op);
 static ir_operand *_new_op (ir *ctx, unsigned int type);
 static void _ir_var_assign (ir *ctx, ast_node *n);
+static void _ir_func_call (ir *ctx, ast_node *n);
 static ir_operand *_to_ir_type (ir *ctx, ast_node *n);
 static unsigned short _op_ast_to_ir (ast_node *n);
 static ir_operand *_temp_var (ir *ctx, ast_node *n);
@@ -21,20 +24,15 @@ ir_init (ir *ctx, ast_node *root)
   _ir_parse (ctx, root);
   ir_print (ctx);
   _ir_eval_optimize (ctx);
+  /* _ir_print_vartable (ctx); */
 }
 
 void
 _ir_eval_optimize (ir *ctx)
 {
+  ir_vartable_item *vt_itm;
   ir_tac *ptr;
   unsigned int i;
-  long int_data;
-
-  ht known_intvar = { 0 }, visited_var = { 0 };
-  htinit (&known_intvar, &ctx->ar, 64, sizeof (long));
-  htinit (&visited_var, &ctx->ar, 64, sizeof (short));
-
-  /* TODO: Support for datatype other than integer. */
 
   /* Compile Time Evaluation. */
   for (i = 0; i < ctx->ops.size; ++i)
@@ -43,72 +41,105 @@ _ir_eval_optimize (ir *ctx)
 
       if (_is_assign (ptr))
         {
-          /* Value of B is already known. */
-          if (ptr->b && ptr->b->type == IR_OP_VAR
-              && stget (&known_intvar, ptr->b->str_data))
+          /* Checking for value of B is already known. */
+          if (ptr->b && ptr->b->type == IR_OP_VAR)
             {
-              int_data = *(long *)stget (&known_intvar, ptr->b->str_data);
-              ptr->b = _new_op (ctx, IR_OP_CONST_INT);
-              ptr->b->int_data = int_data;
+              vt_itm = *(ir_vartable_item **)stget (&ctx->var_table,
+                                                    ptr->b->str_data);
+              if (vt_itm->static_value)
+                {
+                  ptr->b = _new_op (ctx, _ir_expr_datatype (ctx, ptr->b));
+                  ptr->b->int_data = vt_itm->int_data;
+                }
             }
 
-          /* Value of C is already known. */
-          if (ptr->c && ptr->c->type == IR_OP_VAR
-              && stget (&known_intvar, ptr->c->str_data))
+          /* Checking for value of C is already known. */
+          if (ptr->c && ptr->c->type == IR_OP_VAR)
             {
-              int_data = *(long *)stget (&known_intvar, ptr->c->str_data);
-              ptr->c = _new_op (ctx, IR_OP_CONST_INT);
-              ptr->c->int_data = int_data;
+              vt_itm = *(ir_vartable_item **)stget (&ctx->var_table,
+                                                    ptr->c->str_data);
+              if (vt_itm->static_value)
+                {
+                  ptr->c = _new_op (ctx, _ir_expr_datatype (ctx, ptr->c));
+                  ptr->c->int_data = vt_itm->int_data;
+                }
             }
 
           /* Static value. */
           if (ptr->op == IR_ASSIGN)
             {
-              int_data = ptr->b->int_data;
-              stput (&known_intvar, ptr->a->str_data, &int_data);
+              vt_itm = *(ir_vartable_item **)stget (&ctx->var_table,
+                                                    ptr->a->str_data);
+              vt_itm->static_value = 1;
+
+              switch (vt_itm->var->b->type)
+                {
+                case IR_OP_CONST_STR:
+                  vt_itm->str_data = ptr->b->str_data;
+                  break;
+                default:
+                  vt_itm->int_data = ptr->b->int_data;
+                  break;
+                }
             }
           /* Static expression. */
           else if (ptr->b && ptr->b->type != IR_OP_VAR && ptr->c
                    && ptr->c->type != IR_OP_VAR)
             {
+              vt_itm = *(ir_vartable_item **)stget (&ctx->var_table,
+                                                    ptr->a->str_data);
+              vt_itm->static_value = 1;
+
+              /* TODO: Support for float here. */
               switch (ptr->op)
                 {
                 case IR_ASSIGN_ADD:
-                  int_data = ptr->b->int_data + ptr->c->int_data;
-                  stput (&known_intvar, ptr->a->str_data, &int_data);
+                  vt_itm->int_data = ptr->b->int_data + ptr->c->int_data;
                   break;
                 case IR_ASSIGN_SUB:
-                  int_data = ptr->b->int_data - ptr->c->int_data;
-                  stput (&known_intvar, ptr->a->str_data, &int_data);
+                  vt_itm->int_data = ptr->b->int_data - ptr->c->int_data;
                   break;
                 case IR_ASSIGN_MUL:
-                  int_data = ptr->b->int_data * ptr->c->int_data;
-                  stput (&known_intvar, ptr->a->str_data, &int_data);
+                  vt_itm->int_data = ptr->b->int_data * ptr->c->int_data;
                   break;
                 case IR_ASSIGN_DIV:
-                  int_data = ptr->b->int_data / ptr->c->int_data;
-                  stput (&known_intvar, ptr->a->str_data, &int_data);
+                  vt_itm->int_data = ptr->b->int_data / ptr->c->int_data;
+                  break;
                 }
+
               ptr->op = IR_ASSIGN;
               ptr->b = _new_op (ctx, IR_OP_CONST_INT);
-              ptr->b->int_data = int_data;
+              ptr->b->int_data = vt_itm->int_data;
               arfree (ptr->c);
               ptr->c = (void *)0;
             }
         }
     }
 
-  stfold (&known_intvar);
-  stfold (&visited_var);
+  /* Remove useless variables. */
+  for (i = 0; i < ctx->ops.size; ++i)
+    {
+      ptr = *(ir_tac **)dageti (&ctx->ops, i);
+
+      if (_is_assign (ptr))
+        {
+          vt_itm = *(ir_vartable_item **)stget (&ctx->var_table,
+                                                ptr->a->str_data);
+          if (vt_itm->usage < 1)
+            {
+              dadel (&ctx->ops, i);
+              --i;
+            }
+        }
+    }
 }
 
 void
 _ir_parse (ir *ctx, ast_node *root)
 {
   ast_node *ptr = root;
-  ir_tac *new, *tac_ptr;
-  clomy_stdata *std;
-  unsigned int i;
+  ir_tac *new;
+  ir_vartable_item *vt_itm;
 
   sbinit (&ctx->sb, &ctx->ar);
 
@@ -122,21 +153,6 @@ _ir_parse (ir *ctx, ast_node *root)
           sbappend (&ctx->sb, "_start");
           new->a->str_data = sbflush (&ctx->sb)->data;
           daappend (&ctx->ops, &new);
-
-          for (i = 0; i < ctx->var_table.capacity; ++i)
-            {
-              std = ctx->var_table.data[i];
-              while (std)
-                {
-                  tac_ptr = *(ir_tac **)std->data;
-                  daappend (&ctx->ops, &tac_ptr);
-                  std = std->next;
-                }
-            }
-
-          stfold (&ctx->var_table);
-          htinit (&ctx->var_table, &ctx->ar, 16, sizeof (ir_tac *));
-
           _ir_parse (ctx, ((ast_data_block *)ptr->data)->next);
           break;
         case AST_VAR_DECLARE:
@@ -144,10 +160,17 @@ _ir_parse (ir *ctx, ast_node *root)
           new->a = _new_op (ctx, IR_OP_VAR);
           new->a->str_data = ((ast_data_var_declare *)ptr->data)->name->data;
           new->b = _new_op (ctx, IR_OP_CONST_INT);
-          stput (&ctx->var_table, new->a->str_data, &new);
+
+          vt_itm = aralloc (&ctx->ar, sizeof (ir_vartable_item));
+          vt_itm->var = new;
+
+          stput (&ctx->var_table, new->a->str_data, &vt_itm);
           break;
         case AST_VAR_ASSIGN:
           _ir_var_assign (ctx, ptr);
+          break;
+        case AST_FUNCALL:
+          _ir_func_call (ctx, ptr);
           break;
         }
       ptr = ptr->next;
@@ -171,6 +194,7 @@ ir_print (ir *ctx)
 void
 ir_fold (ir *ctx)
 {
+  stfold (&ctx->var_table);
   dafold (&ctx->ops);
   arfold (&ctx->ar);
 }
@@ -240,6 +264,43 @@ _ir_var_assign (ir *ctx, ast_node *n)
 }
 
 void
+_ir_func_call (ir *ctx, ast_node *n)
+{
+  ast_data_funcall *fun_data = n->data;
+  ast_data_var_declare *vard_data;
+  ast_node *ptr = fun_data->args_head;
+  ir_tac *new;
+  ir_vartable_item *vt_itm;
+
+  while (ptr)
+    {
+      new = _new_tac (ctx, IR_PUSH_ARG);
+      if (ptr->type != AST_VAR_DECLARE)
+        {
+          new->a = _temp_var (ctx, ptr);
+        }
+      else
+        {
+          vard_data = ptr->data;
+          new->a = _new_op (ctx, IR_OP_VAR);
+          new->a->str_data = vard_data->name->data;
+        }
+
+      daappend (&ctx->ops, &new);
+
+      vt_itm = *(ir_vartable_item **)stget (&ctx->var_table, new->a->str_data);
+      ++vt_itm->usage;
+
+      ptr = ptr->next;
+    }
+
+  new = _new_tac (ctx, IR_CALL);
+  new->a = _new_op (ctx, IR_OP_FUN);
+  new->a->str_data = fun_data->name->data;
+  daappend (&ctx->ops, &new);
+}
+
+void
 _print_op (ir_tac *itm)
 {
   switch (itm->op)
@@ -283,7 +344,12 @@ _print_op (ir_tac *itm)
       _print_exp (itm->c);
       printf ("\n");
       break;
-
+    case IR_PUSH_ARG:
+      printf ("  push_arg %s\n", itm->a->str_data);
+      break;
+    case IR_CALL:
+      printf ("  call %s\n", itm->a->str_data);
+      break;
     default:
       printf ("%d?\n", itm->op);
       break;
@@ -314,7 +380,8 @@ ir_operand *
 _temp_var (ir *ctx, ast_node *n)
 {
   ast_data_op *op_data = n->data;
-  ir_tac *new = _new_tac (ctx, _op_ast_to_ir (n));
+  ir_tac *dec, *new = _new_tac (ctx, _op_ast_to_ir (n));
+  ir_vartable_item *vt_itm;
   string *var_name;
 
   sbappendch (&ctx->sb, 't');
@@ -324,15 +391,32 @@ _temp_var (ir *ctx, ast_node *n)
   new->a = _new_op (ctx, IR_OP_VAR);
   new->a->str_data = var_name->data;
 
-  if (((ast_node *)op_data->left)->type == AST_OP)
-    new->b = _temp_var (ctx, op_data->left);
+  if (n->type != AST_OP)
+    {
+      new->b = _to_ir_type (ctx, n);
+    }
   else
-    new->b = _to_ir_type (ctx, op_data->left);
+    {
+      if (((ast_node *)op_data->left)->type == AST_OP)
+        new->b = _temp_var (ctx, op_data->left);
+      else
+        new->b = _to_ir_type (ctx, op_data->left);
 
-  if (((ast_node *)op_data->right)->type == AST_OP)
-    new->c = _temp_var (ctx, op_data->right);
-  else
-    new->c = _to_ir_type (ctx, op_data->right);
+      if (((ast_node *)op_data->right)->type == AST_OP)
+        new->c = _temp_var (ctx, op_data->right);
+      else
+        new->c = _to_ir_type (ctx, op_data->right);
+    }
+
+  dec = _new_tac (ctx, IR_DECLARE);
+  dec->a = _new_op (ctx, IR_OP_VAR);
+  dec->a->str_data = var_name->data;
+  dec->b = _new_op (
+      ctx, _ir_expr_datatype (ctx, new->b)); // TODO: figure out the datatype
+
+  vt_itm = aralloc (&ctx->ar, sizeof (ir_vartable_item));
+  vt_itm->var = dec;
+  stput (&ctx->var_table, dec->a->str_data, &vt_itm);
 
   daappend (&ctx->ops, &new);
 
@@ -366,6 +450,7 @@ ir_operand *
 _to_ir_type (ir *ctx, ast_node *n)
 {
   ir_operand *op = aralloc (&ctx->ar, sizeof (ir_operand));
+  string *str_data;
 
   switch (n->type)
     {
@@ -374,8 +459,9 @@ _to_ir_type (ir *ctx, ast_node *n)
       op->int_data = *(long *)n->data;
       break;
     case AST_STRLIT:
+      str_data = n->data;
       op->type = IR_OP_CONST_STR;
-      op->str_data = (char *)n->data;
+      op->str_data = str_data->data;
       break;
     case AST_VAR_DECLARE:
       op->type = IR_OP_VAR;
@@ -395,6 +481,7 @@ _ir_datatype (ir_operand *op)
     case IR_OP_CONST_STR:
       return "str";
     default:
+      printf ("[INFO] Unknown datatype %d\n", op->type);
       return "unk";
     }
 }
@@ -404,4 +491,39 @@ _is_assign (ir_tac *n)
 {
   return n->op == IR_ASSIGN || n->op == IR_ASSIGN_ADD || n->op == IR_ASSIGN_SUB
          || n->op == IR_ASSIGN_MUL || n->op == IR_ASSIGN_DIV;
+}
+
+void
+_ir_print_vartable (ir *ctx)
+{
+  ir_vartable_item *vt_itm;
+  clomy_stdata *std;
+  unsigned int i;
+
+  printf ("--------------------\n");
+  for (i = 0; i < ctx->var_table.capacity; ++i)
+    {
+      std = ctx->var_table.data[i];
+      while (std)
+        {
+          vt_itm = *(ir_vartable_item **)std->data;
+          printf ("%s\t%s\t%s\t%d\n", _ir_datatype (vt_itm->var->b),
+                  vt_itm->var->a->str_data,
+                  vt_itm->static_value ? "yes" : "no", vt_itm->usage);
+          std = std->next;
+        }
+    }
+  printf ("--------------------\n");
+}
+
+unsigned short
+_ir_expr_datatype (ir *ctx, ir_operand *itm)
+{
+  ir_vartable_item *vt_itm;
+  if (itm->type == IR_OP_VAR && stget (&ctx->var_table, itm->str_data))
+    {
+      vt_itm = *(ir_vartable_item **)stget (&ctx->var_table, itm->str_data);
+      return vt_itm->var->b->type;
+    }
+  return itm->type;
 }

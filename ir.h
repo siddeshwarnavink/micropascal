@@ -12,13 +12,15 @@ enum ir_optype
   IR_ASSIGN_MUL,
   IR_ASSIGN_DIV,
   IR_ADD,
+  IR_PUSH_ARG,
   IR_CALL,
-  IR_LABEL
+  IR_LABEL,
 };
 
 enum ir_operand_type
 {
   IR_OP_VAR = 0,
+  IR_OP_FUN,
   IR_OP_LABEL,
   IR_OP_CONST_INT,
   IR_OP_CONST_STR,
@@ -44,6 +46,19 @@ struct ir_tac
   struct ir_tac *next;
 };
 typedef struct ir_tac ir_tac;
+
+struct ir_vartable_item
+{
+  ir_tac *var;
+  unsigned short static_value;
+  unsigned int usage;
+  union
+  {
+    char *str_data;
+    unsigned long int_data;
+  };
+};
+typedef struct ir_vartable_item ir_vartable_item;
 
 struct ir
 {
