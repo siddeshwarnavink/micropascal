@@ -66,13 +66,31 @@ _ir_eval_optimize (ir *ctx)
                 case IR_OP_CONST_INT:
                   vt_itm->int_data = ptr->b->int_data;
                   break;
+                case IR_OP_CONST_BOOL:
+                  vt_itm->bool_data = ptr->b->bool_data;
+                  break;
                 default:
                   CLOMY_FAIL (
                       "Unreachable. This error should've been caught by AST.");
                   break;
                 }
             }
-          /* Static expression. */
+          /* Static boolean NOT expression. */
+          else if (ptr->op == IR_ASSIGN_NOT && ptr->c->type == IR_OP_CONST_BOOL)
+            {
+              vt_itm = *(ir_vartable_item **)stget (&ctx->var_table,
+                                                    ptr->a->str_data);
+              vt_itm->static_value = 1;
+
+              ptr->b = _new_op (ctx, IR_OP_CONST_BOOL);
+              ptr->b->bool_data = ptr->c->bool_data == 1 ? 0 : 1;
+              arfree (ptr->c);
+              ptr->c = (void *)0;
+
+              ptr->op = IR_ASSIGN;
+              vt_itm->bool_data = ptr->b->bool_data;
+            }
+          /* Static arithmetic expression. */
           else if (ptr->b && ptr->b->type != IR_OP_VAR && ptr->c
                    && ptr->c->type != IR_OP_VAR)
             {
@@ -126,11 +144,14 @@ _ir_eval_optimize (ir *ctx)
               if (ptr->b->type == IR_OP_CONST_INT
                   && ptr->b->int_data != vt_itm->int_data)
                 dadel (&ctx->ops, i--);
-              if (ptr->b->type == IR_OP_CONST_FLOAT
-                  && ptr->b->float_data != vt_itm->float_data)
+              else if (ptr->b->type == IR_OP_CONST_FLOAT
+                       && ptr->b->float_data != vt_itm->float_data)
                 dadel (&ctx->ops, i--);
-              if (ptr->b->type == IR_OP_CONST_STR
-                  && strcmp (ptr->b->str_data, vt_itm->str_data) != 0)
+              else if (ptr->b->type == IR_OP_CONST_BOOL
+                       && ptr->b->bool_data != vt_itm->bool_data)
+                dadel (&ctx->ops, i--);
+              else if (ptr->b->type == IR_OP_CONST_STR
+                       && strcmp (ptr->b->str_data, vt_itm->str_data) != 0)
                 dadel (&ctx->ops, i--);
             }
         }
@@ -173,6 +194,9 @@ _ir_parse (ir *ctx, ast_node *root)
               break;
             case AST_STRLIT:
               new->b = _new_op (ctx, IR_OP_CONST_STR);
+              break;
+            case AST_BOOL:
+              new->b = _new_op (ctx, IR_OP_CONST_BOOL);
               break;
             default:
               CLOMY_FAIL ("Unreachable.");
@@ -258,21 +282,32 @@ _ir_var_assign (ir *ctx, ast_node *n)
         case '/':
           new = _new_tac (ctx, IR_ASSIGN_DIV);
           break;
+        case '!':
+          new = _new_tac (ctx, IR_ASSIGN_NOT);
+          break;
         default:
+          printf ("[INFO] op_data->op = %c\n", op_data->op);
+          printf ("[INFO] AST Dump:\n");
+          ast_print_tree (n, "\n");
           CLOMY_FAIL ("Unreachable.");
           break;
         }
       new->a = _new_op (ctx, IR_OP_VAR);
       new->a->str_data = vard_data->name->data;
-      if (((ast_node *)op_data->left)->type == AST_OP)
-        new->b = _temp_var (ctx, op_data->left);
-      else
-        new->b = _to_ir_type (ctx, op_data->left);
-
-      if (((ast_node *)op_data->right)->type == AST_OP)
-        new->c = _temp_var (ctx, op_data->right);
-      else
-        new->c = _to_ir_type (ctx, op_data->right);
+      if (op_data->left)
+        {
+          if (((ast_node *)op_data->left)->type == AST_OP)
+            new->b = _temp_var (ctx, op_data->left);
+          else
+            new->b = _to_ir_type (ctx, op_data->left);
+        }
+      if (op_data->right)
+        {
+          if (((ast_node *)op_data->right)->type == AST_OP)
+            new->c = _temp_var (ctx, op_data->right);
+          else
+            new->c = _to_ir_type (ctx, op_data->right);
+        }
     }
   else
     {
@@ -365,6 +400,12 @@ _print_op (ir_tac *itm)
       _print_exp (itm->c);
       printf ("\n");
       break;
+    case IR_ASSIGN_NOT:
+      printf ("  %s = ", itm->a->str_data);
+      printf (" !");
+      _print_exp (itm->c);
+      printf ("\n");
+      break;
     case IR_PUSH_ARG:
       printf ("  push_arg %s\n", itm->a->str_data);
       break;
@@ -390,6 +431,9 @@ _print_exp (ir_operand *op)
       break;
     case IR_OP_CONST_STR:
       printf ("\"%s\"", op->str_data);
+      break;
+    case IR_OP_CONST_BOOL:
+      printf ("%s", op->bool_data == 1 ? "true" : "false");
       break;
     case IR_OP_VAR:
       printf ("%s", op->str_data);
@@ -435,8 +479,7 @@ _temp_var (ir *ctx, ast_node *n)
   dec = _new_tac (ctx, IR_DECLARE);
   dec->a = _new_op (ctx, IR_OP_VAR);
   dec->a->str_data = var_name->data;
-  dec->b = _new_op (
-      ctx, _ir_expr_datatype (ctx, new->b)); // TODO: figure out the datatype
+  dec->b = _new_op (ctx, _ir_expr_datatype (ctx, new->b));
 
   vt_itm = aralloc (&ctx->ar, sizeof (ir_vartable_item));
   vt_itm->var = dec;
@@ -495,6 +538,13 @@ _to_ir_type (ir *ctx, ast_node *n)
       op->type = IR_OP_VAR;
       op->str_data = ((ast_data_var_declare *)n->data)->name->data;
       break;
+    case AST_BOOL:
+      op->type = IR_OP_CONST_BOOL;
+      op->bool_data = *(unsigned short *)n->data;
+      break;
+    default:
+      CLOMY_FAIL ("Unreachable.");
+      break;
     }
   return op;
 }
@@ -510,6 +560,8 @@ _ir_datatype (ir_operand *op)
       return "str";
     case IR_OP_CONST_FLOAT:
       return "float";
+    case IR_OP_CONST_BOOL:
+      return "bool";
     default:
       printf ("[INFO] Unknown datatype %d\n", op->type);
       return "unk";
@@ -520,7 +572,8 @@ unsigned short
 _is_assign (ir_tac *n)
 {
   return n->op == IR_ASSIGN || n->op == IR_ASSIGN_ADD || n->op == IR_ASSIGN_SUB
-         || n->op == IR_ASSIGN_MUL || n->op == IR_ASSIGN_DIV;
+         || n->op == IR_ASSIGN_MUL || n->op == IR_ASSIGN_DIV
+         || n->op == IR_ASSIGN_NOT;
 }
 
 void

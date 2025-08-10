@@ -7,6 +7,8 @@ var
   d: integer;
   e: real;
   f: real;
+  g: boolean;
+  h: boolean;
 begin
   a := 1+2*3+4;
   a := 12;
@@ -18,4 +20,7 @@ begin
   e := 34.34;
   f := f + e;
   writeln('%f', f);
+  g := true;
+  g := !g;
+  writeln('%d', g);
 end.

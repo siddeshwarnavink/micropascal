@@ -22,6 +22,9 @@
             case IR_OP_CONST_INT:                                             \
               (ptr)->int_data = vt_itm->int_data;                             \
               break;                                                          \
+            case IR_OP_CONST_BOOL:                                            \
+              (ptr)->bool_data = vt_itm->bool_data;                           \
+              break;                                                          \
             default:                                                          \
               CLOMY_FAIL ("Unreachable.");                                    \
               break;                                                          \
@@ -57,6 +60,7 @@ enum ir_optype
   IR_ASSIGN_SUB,
   IR_ASSIGN_MUL,
   IR_ASSIGN_DIV,
+  IR_ASSIGN_NOT,
   IR_ADD,
   IR_PUSH_ARG,
   IR_CALL,
@@ -71,6 +75,7 @@ enum ir_operand_type
   IR_OP_CONST_INT,
   IR_OP_CONST_FLOAT,
   IR_OP_CONST_STR,
+  IR_OP_CONST_BOOL,
 };
 
 struct ir_operand
@@ -81,6 +86,7 @@ struct ir_operand
     char *str_data;
     long int_data;
     double float_data;
+    unsigned short bool_data;
   };
 };
 typedef struct ir_operand ir_operand;
@@ -105,6 +111,7 @@ struct ir_vartable_item
     char *str_data;
     long int_data;
     double float_data;
+    unsigned short bool_data;
   };
 };
 typedef struct ir_vartable_item ir_vartable_item;
