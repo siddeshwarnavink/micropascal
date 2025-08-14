@@ -101,8 +101,9 @@ compiler_main (char *path, unsigned short debug, unsigned short target)
     }
   else if (target == TARGET_IR)
     {
-      ir_init (&tac, tree.root);
+      ir_init (&tac, tree.root, debug);
       ir_print (&tac);
+      printf ("\n;; vi: ft=asm\n");
       ir_fold (&tac);
     }
   else

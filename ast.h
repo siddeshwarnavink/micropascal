@@ -17,7 +17,6 @@
 #define AST_APPEND_TO_BLOCK()                                                 \
   do                                                                          \
     {                                                                         \
-      AST_LOG ("Item ");                                                      \
       if (ctx->debug)                                                         \
         {                                                                     \
           ast_print_tree (new, " ");                                          \
@@ -26,7 +25,7 @@
       /* Append to WHILE loop. */                                             \
       if (loop)                                                               \
         {                                                                     \
-          AST_LOG ("Appending to loop.\n");                                   \
+          AST_LOG ("Appending to loop.");                                     \
           while_data = loop->data;                                            \
           while_data->next = new;                                             \
           parent = loop;                                                      \
@@ -40,14 +39,14 @@
           /* Append to NO branch. */                                          \
           if (cond_data->no == (void *)0xDEADBEEF)                            \
             {                                                                 \
-              AST_LOG ("Appending to condition NO.\n");                       \
+              AST_LOG ("Appending to condition NO.");                         \
               cond_data->no = new;                                            \
             }                                                                 \
           /* Append to block NO branch. */                                    \
           else if (cond_data->no && cond_data->no != (void *)0xDEADBEEF       \
                    && cond_data->yes->type == AST_BLOCK)                      \
             {                                                                 \
-              AST_LOG ("Appending to condition NO branch.\n");                \
+              AST_LOG ("Appending to condition NO branch.");                  \
               blk_data = cond_data->no->data;                                 \
               new->next = blk_data->next;                                     \
               blk_data->next = new;                                           \
@@ -55,27 +54,27 @@
           /* Append to YES branch. */                                         \
           else if (!cond_data->yes)                                           \
             {                                                                 \
-              AST_LOG ("Appending to condition YES.\n");                      \
+              AST_LOG ("Appending to condition YES.");                        \
               cond_data->yes = new;                                           \
             }                                                                 \
           /* Append to block YES branch. */                                   \
           else if (cond_data->yes && cond_data->yes->type == AST_BLOCK)       \
             {                                                                 \
-              AST_LOG ("Appending to condition YES block.\n");                \
+              AST_LOG ("Appending to condition YES block.");                  \
               blk_data = cond_data->yes->data;                                \
               new->next = blk_data->next;                                     \
               blk_data->next = new;                                           \
             }                                                                 \
           else                                                                \
             {                                                                 \
-              CLOMY_FAIL ("Unreachable.");                                    \
+              CLOMY_FAIL ("[AST] Unreachable IF placement.");                 \
             }                                                                 \
         }                                                                     \
       /* Append to current block. */                                          \
       else if (block_stk.size > 0)                                            \
         {                                                                     \
-          AST_LOG ("Appending to block.\n");                                  \
           parent = *(ast_node **)dageti (&block_stk, 0);                      \
+          AST_LOG ("Appending to block %p.", parent);                         \
           if (parent)                                                         \
             {                                                                 \
               blk_data = parent->data;                                        \
@@ -84,13 +83,14 @@
             }                                                                 \
           else                                                                \
             {                                                                 \
-              CLOMY_FAIL ("Block stack should not contain null pointer.");    \
+              CLOMY_FAIL (                                                    \
+                  "[AST] Block stack shouldn't contain null pointer.");       \
             }                                                                 \
         }                                                                     \
       /* Append to root. */                                                   \
       else                                                                    \
         {                                                                     \
-          AST_LOG ("Appending to root.\n");                                   \
+          AST_LOG ("Appending to root.");                                     \
           new->next = ctx->root;                                              \
           ctx->root = new;                                                    \
           parent = ctx->root;                                                 \

@@ -52,6 +52,17 @@
       break;                                                                  \
     }
 
+#define IR_NEW_BLOCK(var)                                                     \
+  do                                                                          \
+    {                                                                         \
+      (var) = _new_tac (ctx, IR_LABEL);                                       \
+      sbappendch (&ctx->sb, 'b');                                             \
+      sbappendch (&ctx->sb, (char)(ctx->block_count++ + '0'));                \
+      (var)->a = _new_op (ctx, IR_OP_LABEL);                                  \
+      (var)->a->str_data = sbflush (&ctx->sb)->data;                          \
+    }                                                                         \
+  while (0);
+
 enum ir_optype
 {
   IR_DECLARE = 0,
@@ -65,6 +76,8 @@ enum ir_optype
   IR_PUSH_ARG,
   IR_CALL,
   IR_LABEL,
+  IR_IF,
+  IR_JUMP
 };
 
 enum ir_operand_type
@@ -80,7 +93,7 @@ enum ir_operand_type
 
 struct ir_operand
 {
-  unsigned short type;
+  enum ir_operand_type type;
   union
   {
     char *str_data;
@@ -93,7 +106,7 @@ typedef struct ir_operand ir_operand;
 
 struct ir_tac
 {
-  unsigned short op;
+  enum ir_optype op;
   ir_operand *a;
   ir_operand *b;
   ir_operand *c;
@@ -122,11 +135,13 @@ struct ir
   stringbuilder sb;
   ht var_table;
   da ops;
+  unsigned short debug;
   unsigned int tempvar_count;
+  unsigned int block_count;
 };
 typedef struct ir ir;
 
-void ir_init (ir *ctx, ast_node *root);
+void ir_init (ir *ctx, ast_node *root, unsigned short debug);
 
 void ir_print (ir *ctx);
 

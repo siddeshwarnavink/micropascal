@@ -10,6 +10,8 @@ static ir_tac *_new_tac (ir *ctx, unsigned short op);
 static ir_operand *_new_op (ir *ctx, unsigned int type);
 static void _ir_var_assign (ir *ctx, ast_node *n);
 static void _ir_func_call (ir *ctx, ast_node *n);
+static ir_tac *_ir_block (ir *ctx, ast_node *n, unsigned short depth);
+static void _ir_cond (ir *ctx, ast_node *n);
 static ir_operand *_to_ir_type (ir *ctx, ast_node *n);
 static unsigned short _op_ast_to_ir (ast_node *n);
 static ir_operand *_temp_var (ir *ctx, ast_node *n);
@@ -18,14 +20,25 @@ static void _print_op (ir_tac *itm);
 static char *_ir_datatype (ir_operand *op);
 
 void
-ir_init (ir *ctx, ast_node *root)
+ir_init (ir *ctx, ast_node *root, unsigned short debug)
 {
+  ctx->debug = debug;
   dainit (&ctx->ops, &ctx->ar, sizeof (ir_tac *), 64);
   htinit (&ctx->var_table, &ctx->ar, 16, sizeof (ir_tac *));
+  sbinit (&ctx->sb, &ctx->ar);
+
   _ir_parse (ctx, root);
-  /* ir_print (ctx); */
+  if (debug)
+    {
+      printf (";; IR before optimization.\n");
+      _ir_print_vartable (ctx);
+      ir_print (ctx);
+    }
+
   _ir_eval_optimize (ctx);
-  _ir_print_vartable (ctx);
+
+  if (debug)
+    _ir_print_vartable (ctx);
 }
 
 void
@@ -76,7 +89,8 @@ _ir_eval_optimize (ir *ctx)
                 }
             }
           /* Static boolean NOT expression. */
-          else if (ptr->op == IR_ASSIGN_NOT && ptr->c->type == IR_OP_CONST_BOOL)
+          else if (ptr->op == IR_ASSIGN_NOT
+                   && ptr->c->type == IR_OP_CONST_BOOL)
             {
               vt_itm = *(ir_vartable_item **)stget (&ctx->var_table,
                                                     ptr->a->str_data);
@@ -113,7 +127,7 @@ _ir_eval_optimize (ir *ctx)
                   ptr->b->float_data = vt_itm->float_data;
                   break;
                 default:
-                  CLOMY_FAIL ("Unreachable.");
+                  CLOMY_FAIL ("Unreachable. Unknown static expression.");
                   break;
                 }
 
@@ -165,12 +179,12 @@ _ir_parse (ir *ctx, ast_node *root)
   ir_tac *new;
   ir_vartable_item *vt_itm;
 
-  sbinit (&ctx->sb, &ctx->ar);
-
   while (ptr)
     {
       switch (ptr->type)
         {
+        case AST_PROGNAME:
+          break;
         case AST_MAIN_BLOCK:
           new = _new_tac (ctx, IR_LABEL);
           new->a = _new_op (ctx, IR_OP_LABEL);
@@ -199,7 +213,7 @@ _ir_parse (ir *ctx, ast_node *root)
               new->b = _new_op (ctx, IR_OP_CONST_BOOL);
               break;
             default:
-              CLOMY_FAIL ("Unreachable.");
+              CLOMY_FAIL ("Unreachable. Unknown literal.");
               break;
             }
 
@@ -214,10 +228,19 @@ _ir_parse (ir *ctx, ast_node *root)
         case AST_FUNCALL:
           _ir_func_call (ctx, ptr);
           break;
+        case AST_BLOCK:
+          _ir_block (ctx, ptr, 1);
+          break;
+        case AST_COND:
+          _ir_cond (ctx, ptr);
+          break;
+        default:
+          printf ("[INFO] ptr->type = %d\n", ptr->type);
+          CLOMY_FAIL ("Unreachable.");
+          break;
         }
       ptr = ptr->next;
     }
-  sbfold (&ctx->sb);
 }
 
 void
@@ -236,6 +259,7 @@ ir_print (ir *ctx)
 void
 ir_fold (ir *ctx)
 {
+  sbfold (&ctx->sb);
   stfold (&ctx->var_table);
   dafold (&ctx->ops);
   arfold (&ctx->ar);
@@ -356,6 +380,86 @@ _ir_func_call (ir *ctx, ast_node *n)
   daappend (&ctx->ops, &new);
 }
 
+ir_tac *
+_ir_block (ir *ctx, ast_node *n, unsigned short depth)
+{
+  ir_tac *new;
+  ast_data_block *data = n->data;
+  IR_NEW_BLOCK (new);
+  daappend (&ctx->ops, &new);
+
+  _ir_parse (ctx, data->next);
+
+  if (depth)
+    {
+      IR_NEW_BLOCK (new);
+      daappend (&ctx->ops, &new);
+    }
+  return new;
+}
+
+void
+_ir_cond (ir *ctx, ast_node *n)
+{
+  ir_tac *new = _new_tac (ctx, IR_IF), *after, *block, *block_after;
+  ast_data_cond *data = n->data;
+  new->a = _to_ir_type (ctx, data->cond);
+  daappend (&ctx->ops, &new);
+
+  /* YES branch block. */
+  if (data->yes->type != AST_BLOCK)
+    {
+      IR_NEW_BLOCK (block);
+      daappend (&ctx->ops, &block);
+      _ir_parse (ctx, data->yes);
+    }
+  else
+    {
+      block = _ir_block (ctx, data->yes, 0);
+    }
+
+  /* Block to jump after condition. */
+  IR_NEW_BLOCK (block_after);
+  if (data->no)
+    {
+      after = _new_tac (ctx, IR_JUMP);
+      after->a = _new_op (ctx, IR_OP_LABEL);
+      after->a->str_data = block_after->a->str_data;
+      daappend (&ctx->ops, &after);
+    }
+
+  new->b = _new_op (ctx, IR_OP_LABEL);
+  new->b->str_data = block->a->str_data;
+
+  if (!data->yes)
+    CLOMY_FAIL ("[IR] Unreachable. Condition should have atleast YES branch");
+
+  /* NO branch block. */
+  if (data->no)
+    {
+      if (data->no->type == AST_BLOCK)
+        {
+          block = _ir_block (ctx, data->no, 0);
+        }
+      else
+        {
+          IR_NEW_BLOCK (block);
+          daappend (&ctx->ops, &block);
+          _ir_parse (ctx, data->no);
+        }
+
+      new->c = _new_op (ctx, IR_OP_LABEL);
+      new->c->str_data = block->a->str_data;
+    }
+  else
+    {
+      new->c = _new_op (ctx, IR_OP_LABEL);
+      new->c->str_data = block_after->a->str_data;
+    }
+
+  daappend (&ctx->ops, &block_after);
+}
+
 void
 _print_op (ir_tac *itm)
 {
@@ -370,6 +474,26 @@ _print_op (ir_tac *itm)
     case IR_ASSIGN:
       printf ("  %s = ", itm->a->str_data);
       _print_exp (itm->b);
+      printf ("\n");
+      break;
+    case IR_JUMP:
+      printf ("  jump ");
+      _print_exp (itm->a);
+      printf ("\n");
+      break;
+    case IR_IF:
+      printf ("  if ");
+      _print_exp (itm->a);
+      if (itm->b)
+        {
+          printf (" then ");
+          _print_exp (itm->b);
+        }
+      if (itm->c)
+        {
+          printf ("\n  else ");
+          _print_exp (itm->c);
+        }
       printf ("\n");
       break;
     case IR_ASSIGN_ADD:
@@ -423,6 +547,9 @@ _print_exp (ir_operand *op)
 {
   switch (op->type)
     {
+    case IR_OP_LABEL:
+      printf ("block %s", op->str_data);
+      break;
     case IR_OP_CONST_FLOAT:
       printf ("%f", op->float_data);
       break;
@@ -543,6 +670,7 @@ _to_ir_type (ir *ctx, ast_node *n)
       op->bool_data = *(unsigned short *)n->data;
       break;
     default:
+      printf ("[INFO] n->type = %d\n", n->type);
       CLOMY_FAIL ("Unreachable.");
       break;
     }
@@ -583,20 +711,20 @@ _ir_print_vartable (ir *ctx)
   clomy_stdata *std;
   unsigned int i;
 
-  printf ("--------------------\n");
+  printf (";; --------------------\n");
   for (i = 0; i < ctx->var_table.capacity; ++i)
     {
       std = ctx->var_table.data[i];
       while (std)
         {
           vt_itm = *(ir_vartable_item **)std->data;
-          printf ("%s\t%s\t%s\t%d\n", _ir_datatype (vt_itm->var->b),
+          printf (";; %s\t%s\t%s\t%d\n", _ir_datatype (vt_itm->var->b),
                   vt_itm->var->a->str_data,
                   vt_itm->static_value ? "yes" : "no", vt_itm->usage);
           std = std->next;
         }
     }
-  printf ("--------------------\n");
+  printf (";; --------------------\n");
 }
 
 unsigned short

@@ -1,4 +1,5 @@
 #include "codegen.h"
+#include "clomy_test.h"
 
 void _ident_prefix (cg *ctx);
 void _parse_exp (cg *ctx, ast_node *ptr);
@@ -63,6 +64,9 @@ _parse_exp (cg *ctx, ast_node *ptr)
       sbappendch (&ctx->sb, op_data->op);
       if (op_data->right)
         _parse_exp (ctx, op_data->right);
+      break;
+    default:
+      CLOMY_FAIL ("Unreachable.");
       break;
     }
 }
@@ -194,6 +198,9 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
               arg = arg->next;
             }
           sbappend (&ctx->sb, ");\n");
+          break;
+        default:
+          CLOMY_FAIL ("Unreachable.");
           break;
         }
       ptr = ptr->next;
