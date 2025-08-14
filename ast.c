@@ -35,23 +35,28 @@ ast_print_tree (ast_node *root, char *delim)
     }
 }
 
+/* TODO: We need to hava some sort of stack-based approach
+   for handling loop to support nested loop. */
 ast_node *
-ast_parse (ast *ctx, lex *lexer)
+ast_parse (ast *ctx, lex *lexer, unsigned short debug)
 {
-  da block_stk = { 0 };
-  ast_node *new, *blk, *blk2, *exp, *var, *cond = (void *)0, *loop = (void *)0;
+  da block_stk = { 0 }, cond_stk = { 0 };
+  ast_node *new, *parent, *blk, *cond, *exp, *var, *loop = (void *)0;
   string *str_data, *str_data2;
   ast_data_var_declare *vd_data;
   ast_data_var_assign *va_data;
   ast_data_funcall *funcall_data;
   ast_data_cond *cond_data;
   ast_data_while *while_data;
-  ast_data_block *blk_data, *blk_data2;
+  ast_data_block *blk_data;
   void *ptr;
+  unsigned int i;
   int token;
-  unsigned short found_entry = 0, rvar = 0, cond_else = 0;
+  unsigned short found_entry = 0, rvar = 0;
 
+  ctx->debug = debug;
   dainit (&block_stk, &ctx->ar, 16, sizeof (ast_node *));
+  dainit (&cond_stk, &ctx->ar, 16, sizeof (ast_node *));
   htinit (&ctx->ident_table, &ctx->ar, 16, sizeof (ast_node *));
   ctx->root = (void *)0;
 
@@ -77,11 +82,37 @@ ast_parse (ast *ctx, lex *lexer)
     {
       if (token == TOKEN_ELSE)
         {
-          if (!cond)
+          if (cond_stk.size == 0)
             AST_ERROR_IF (1, "Invalid usage of \"else\".");
 
-          cond_else = 1;
+          cond = *(ast_node **)dageti (&cond_stk, 0);
+          cond_data = cond->data;
+          cond_data->no = (void *)0xDEADBEEF;
+
+          if (!cond_data->yes)
+            AST_ERROR_IF (1, "Invalid usage of \"else\".");
+
+          AST_LOG ("Found ELSE for IF.\n");
+          if (ctx->debug)
+            ast_print_tree (cond, " ");
+
           continue;
+        }
+
+      if (cond_stk.size > 0)
+        {
+          cond_data = (*(ast_node **)dageti (&cond_stk, 0))->data;
+          AST_ERROR_IF (!cond_data, "Unreachable.");
+
+          /* Remove IF if it is completed. */
+          if (cond_data->yes && cond_data->no
+              && cond_data->no != (void *)0xDEADBEEF)
+            {
+              AST_LOG ("Getting rid of IF (else found).\n");
+              if (ctx->debug)
+                lex_print_token (lexer, token);
+              dadel (&cond_stk, 0);
+            }
         }
 
       /* Handle var. */
@@ -97,61 +128,68 @@ ast_parse (ast *ctx, lex *lexer)
                && strcmp (lexer->str->data, "begin") == 0)
         {
           rvar = 0;
-          blk = _ast_new_node (ctx, AST_BLOCK);
+          AST_LOG ("Block begin.\n");
+          new = _ast_new_node (ctx, AST_BLOCK);
           blk_data = aralloc (&ctx->ar, sizeof (ast_data_block));
-          blk_data->appended = 0;
-          blk->data = blk_data;
+          new->data = blk_data;
 
-          if (loop)
-            {
-              while_data = loop->data;
-              while_data->next = blk;
-              blk_data->appended = 1;
-              loop = (void *)0;
-            }
-          else if (cond)
-            {
-              cond_data = cond->data;
-              if (!cond_data->yes)
-                {
-                  cond_data->yes = blk;
-                }
-              else
-                {
-                  cond_data->no = blk;
-                  cond = (void *)0;
-                  cond_else = 0;
-                }
-              blk_data->appended = 1;
-            }
-
-          daappend (&block_stk, &blk);
+          AST_APPEND_TO_BLOCK ();
+          blk_data->parent = parent;
+          dapush (&block_stk, &new);
           continue;
         }
 
       /* Handle block end. */
       else if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "end") == 0)
         {
-          AST_ERROR_IF (block_stk.size == 0, "Invalid use of end.");
-          blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);
+          AST_ERROR_IF (block_stk.size == 0, "Invalid use of \"end\".");
+          AST_LOG ("End of Block.\n");
+          blk = *(ast_node **)dageti (&block_stk, 0);
           blk_data = blk->data;
           blk_data->next = reverse_ast_list (blk_data->next);
 
-          if (block_stk.size - 1 == 0)
+          /* Check what's up with the parent. */
+          AST_ERROR_IF (!blk_data->parent, "Unreachable.");
+          AST_LOG ("End Block parent.\n");
+          if (ctx->debug)
+            ast_print_tree (blk_data->parent, " ");
+
+          if (blk_data->parent->type == AST_COND)
             {
-              blk->next = ctx->root;
-              ctx->root = blk;
-            }
-          else if (!blk_data->appended)
-            {
-              blk2 = *(ast_node **)dageti (&block_stk, block_stk.size - 2);
-              blk_data2 = blk2->data;
-              blk->next = blk_data2->next;
-              blk_data2->next = blk;
+              cond_data = blk_data->parent->data;
+              if (cond_data->yes && !cond_data->no
+                  && lex_peek (lexer) != TOKEN_ELSE)
+                {
+                  AST_LOG ("Getting rid of IF (no else found).\n");
+                  if (ctx->debug)
+                    lex_print_token (lexer, token);
+                  dadel (&cond_stk, 0);
+                }
             }
 
-          blk_data->appended = 1;
-          dadel (&block_stk, block_stk.size - 1);
+          /* Remove all child conditions of the block. */
+          new = blk_data->next;
+          while (new)
+            {
+              if (new->type == AST_COND)
+                {
+                  for (i = 0; i < cond_stk.size; ++i)
+                    {
+                      cond = *(ast_node **)dageti (&cond_stk, i);
+                      if (cond == new)
+                        {
+                          printf (
+                              "[INFO] Remove child condition from stack.\n");
+                          if (ctx->debug)
+                            ast_print_tree (cond, " ");
+                          dadel (&cond_stk, i);
+                        }
+                    }
+                }
+              new = new->next;
+            }
+
+          dadel (&block_stk, 0);
         }
 
       /* Handle variable(s) declaration(s). */
@@ -236,13 +274,13 @@ ast_parse (ast *ctx, lex *lexer)
               loop = new;
               continue;
             }
+
           /* IF condition */
           else if (strcmp (str_data->data, "if") == 0)
             {
               new = _ast_new_node (ctx, AST_COND);
               cond_data = aralloc (&ctx->ar, sizeof (ast_data_cond));
               exp = ast_parse_expression (ctx, lexer);
-              cond_else = 0;
               if (exp)
                 {
                   cond_data->cond = exp;
@@ -252,12 +290,14 @@ ast_parse (ast *ctx, lex *lexer)
                 }
               else
                 {
-                  AST_ERROR_IF (1, "Expected condition expression.");
+                  AST_ERROR_IF (1,
+                                "Expected condition expression after \"if\".");
                 }
 
               new->data = cond_data;
               AST_APPEND_TO_BLOCK ();
-              cond = new;
+              // daappend (&cond_stk, &new);
+              dapush (&cond_stk, &new);
               continue;
             }
 
@@ -300,7 +340,7 @@ ast_parse (ast *ctx, lex *lexer)
                   token = lex_peek (lexer);
                 }
 
-              if (!(cond && token == TOKEN_ELSE))
+              if (!(cond_stk.size > 0 && token == TOKEN_ELSE))
                 AST_EXPECT_SEMICOLON ();
 
               funcall_data->args_head
@@ -365,6 +405,7 @@ ast_parse (ast *ctx, lex *lexer)
     ctx->root = reverse_ast_list (ctx->root);
 
   dafold (&block_stk);
+  dafold (&cond_stk);
   stfold (&ctx->ident_table);
 
   /* TODO: Report unclosed blocks. */
@@ -658,7 +699,10 @@ _ast_print_node (ast_node *n)
       if (cond_data->no)
         {
           printf ("\n    ");
-          ast_print_tree (cond_data->no, "\n  ");
+          if (cond_data->no == (void *)0xDEADBEEF)
+            printf ("0xDEADBEEF");
+          else
+            ast_print_tree (cond_data->no, "\n  ");
         }
       printf (")");
       break;

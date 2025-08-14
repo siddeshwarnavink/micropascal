@@ -3,8 +3,8 @@
 #define CLOMY_IMPLEMENTATION
 #include "clomy.h"
 
-#include "ir.h"
 #include "codegen.h"
+#include "ir.h"
 
 int compiler_main (char *path, unsigned short debug, unsigned short target);
 
@@ -82,20 +82,11 @@ compiler_main (char *path, unsigned short debug, unsigned short target)
   ir tac = { 0 };
   string *code;
   FILE *f;
-  int token;
 
   if (lex_init (&lexer, path) == 1)
     return 1;
 
-  if (debug)
-    {
-      while ((token = lex_next_token (&lexer)) != TOKEN_END)
-        {
-          lex_print_token (&lexer, token);
-        }
-    }
-
-  root = ast_parse (&tree, &lexer);
+  root = ast_parse (&tree, &lexer, debug);
   if (!root)
     {
       ast_fold (&tree);
@@ -106,7 +97,7 @@ compiler_main (char *path, unsigned short debug, unsigned short target)
   if (target == TARGET_AST)
     {
       ast_print_tree (tree.root, "\n");
-      printf ("\n");
+      printf ("\n;; vi: ft=lisp\n");
     }
   else if (target == TARGET_IR)
     {
