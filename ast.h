@@ -1,46 +1,99 @@
 #ifndef AST_H
 #define AST_H
 
+#include "clomy_test.h"
 #include "lexer.h"
 
+/* Debug print */
+#define AST_LOG(format, ...)                                                  \
+  do                                                                          \
+    {                                                                         \
+      if (ctx->debug)                                                         \
+        fprintf (stdout, "[AST] " format "\n", ##__VA_ARGS__);                \
+    }                                                                         \
+  while (0)
+
+/* Append AST item NEW to the current block. */
 #define AST_APPEND_TO_BLOCK()                                                 \
   do                                                                          \
     {                                                                         \
+      if (ctx->debug)                                                         \
+        {                                                                     \
+          ast_print_tree (new, " ");                                          \
+          printf ("\n");                                                      \
+        }                                                                     \
+      /* Append to WHILE loop. */                                             \
       if (loop)                                                               \
         {                                                                     \
+          AST_LOG ("Appending to loop.");                                     \
           while_data = loop->data;                                            \
           while_data->next = new;                                             \
+          parent = loop;                                                      \
           loop = (void *)0;                                                   \
         }                                                                     \
-      else if (cond)                                                          \
+      /* Append to IF condition. */                                           \
+      else if (cond_stk.size > 0)                                             \
         {                                                                     \
-          cond_data = cond->data;                                             \
-          if (!cond_data->yes)                                                \
+          parent = *(ast_node **)dageti (&cond_stk, 0);                       \
+          cond_data = parent->data;                                           \
+          /* Append to NO branch. */                                          \
+          if (cond_data->no == (void *)0xDEADBEEF)                            \
             {                                                                 \
+              AST_LOG ("Appending to condition NO.");                         \
+              cond_data->no = new;                                            \
+            }                                                                 \
+          /* Append to block NO branch. */                                    \
+          else if (cond_data->no && cond_data->no != (void *)0xDEADBEEF       \
+                   && cond_data->yes->type == AST_BLOCK)                      \
+            {                                                                 \
+              AST_LOG ("Appending to condition NO branch.");                  \
+              blk_data = cond_data->no->data;                                 \
+              new->next = blk_data->next;                                     \
+              blk_data->next = new;                                           \
+            }                                                                 \
+          /* Append to YES branch. */                                         \
+          else if (!cond_data->yes)                                           \
+            {                                                                 \
+              AST_LOG ("Appending to condition YES.");                        \
               cond_data->yes = new;                                           \
             }                                                                 \
-          else if (cond_data->yes && !cond_else)                              \
+          /* Append to block YES branch. */                                   \
+          else if (cond_data->yes && cond_data->yes->type == AST_BLOCK)       \
             {                                                                 \
+              AST_LOG ("Appending to condition YES block.");                  \
               blk_data = cond_data->yes->data;                                \
               new->next = blk_data->next;                                     \
               blk_data->next = new;                                           \
             }                                                                 \
-          else if (cond_else)                                                 \
+          else                                                                \
             {                                                                 \
-              if (cond_else)                                                  \
-                {                                                             \
-                  cond_data->no = new;                                        \
-                  cond_else = 0;                                              \
-                }                                                             \
-              cond = (void *)0;                                               \
+              CLOMY_FAIL ("[AST] Unreachable IF placement.");                 \
             }                                                                 \
         }                                                                     \
+      /* Append to current block. */                                          \
+      else if (block_stk.size > 0)                                            \
+        {                                                                     \
+          parent = *(ast_node **)dageti (&block_stk, 0);                      \
+          AST_LOG ("Appending to block %p.", parent);                         \
+          if (parent)                                                         \
+            {                                                                 \
+              blk_data = parent->data;                                        \
+              new->next = blk_data->next;                                     \
+              blk_data->next = new;                                           \
+            }                                                                 \
+          else                                                                \
+            {                                                                 \
+              CLOMY_FAIL (                                                    \
+                  "[AST] Block stack shouldn't contain null pointer.");       \
+            }                                                                 \
+        }                                                                     \
+      /* Append to root. */                                                   \
       else                                                                    \
         {                                                                     \
-          blk = *(ast_node **)dageti (&block_stk, block_stk.size - 1);        \
-          blk_data = blk->data;                                               \
-          new->next = blk_data->next;                                         \
-          blk_data->next = new;                                               \
+          AST_LOG ("Appending to root.");                                     \
+          new->next = ctx->root;                                              \
+          ctx->root = new;                                                    \
+          parent = ctx->root;                                                 \
         }                                                                     \
     }                                                                         \
   while (0);
@@ -90,7 +143,7 @@ enum ast_type
 
 struct ast_node
 {
-  unsigned short type;
+  enum ast_type type;
   struct ast_node *next;
   void *data;
 };
@@ -113,7 +166,7 @@ typedef struct ast_data_var_assign ast_data_var_assign;
 
 struct ast_data_block
 {
-  unsigned short appended;
+  ast_node *parent;
   ast_node *next;
 };
 typedef struct ast_data_block ast_data_block;
@@ -153,12 +206,13 @@ struct ast
   arena ar;
   ht ident_table;
   ast_node *root;
+  unsigned short debug;
 };
 typedef struct ast ast;
 
 void ast_print_tree (ast_node *root, char *delim);
 
-ast_node *ast_parse (ast *ctx, lex *lexer);
+ast_node *ast_parse (ast *ctx, lex *lexer, unsigned short debug);
 
 void *ast_parse_expression (ast *ctx, lex *lexer);
 

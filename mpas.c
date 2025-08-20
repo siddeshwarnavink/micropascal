@@ -4,6 +4,7 @@
 #include "clomy.h"
 
 #include "codegen.h"
+//#include "ir.h"
 
 int compiler_main (char *path, unsigned short debug, unsigned short target);
 
@@ -76,20 +77,11 @@ compiler_main (char *path, unsigned short debug, unsigned short target)
   ast_node *root;
   string *code;
   FILE *f;
-  int token;
 
   if (lex_init (&lexer, path) == 1)
     return 1;
 
-  if (debug)
-    {
-      while ((token = lex_next_token (&lexer)) != TOKEN_END)
-        {
-          lex_print_token (&lexer, token);
-        }
-    }
-
-  root = ast_parse (&tree, &lexer);
+  root = ast_parse (&tree, &lexer, debug);
   if (!root)
     {
       ast_fold (&tree);
@@ -100,7 +92,7 @@ compiler_main (char *path, unsigned short debug, unsigned short target)
   if (target == TARGET_AST)
     {
       ast_print_tree (tree.root, "\n");
-      printf ("\n");
+      printf ("\n;; vi: ft=lisp\n");
     }
   else
     {
@@ -123,6 +115,6 @@ void
 usage (char *prog)
 {
   fprintf (stderr, "Usage: %s [FILE] [FLAGS]\n", prog);
-  fprintf (stderr, "    -t     target (ast, c)\n");
+  fprintf (stderr, "    -t     target (ast, ir, c)\n");
   fprintf (stderr, "    -d     show debug\n");
 }

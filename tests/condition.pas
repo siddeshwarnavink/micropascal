@@ -9,9 +9,13 @@ begin
   begin
     writeln('Welcome to the club!');
     writeln('Have a drink!');
+    if age > 21 then
+      writeln('You are still young in some places.');
   end
   else
+  begin
     writeln('Stay away kid!');
+  end;
 
   writeln('Have a nice day!');
 end.

@@ -1,3 +1,4 @@
+#include "clomy_test.h"
 #include "codegen.h"
 
 void _ident_prefix (cg *ctx);
@@ -64,6 +65,9 @@ _parse_exp (cg *ctx, ast_node *ptr)
       if (op_data->right)
         _parse_exp (ctx, op_data->right);
       break;
+    default:
+      CLOMY_FAIL ("Unreachable.");
+      break;
     }
 }
 
@@ -83,6 +87,8 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
     {
       switch (ptr->type)
         {
+        case AST_PROGNAME:
+          break;
         case AST_WHILE:
           while_data = ptr->data;
           sbappend (&ctx->sb, "while(");
@@ -194,6 +200,10 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
               arg = arg->next;
             }
           sbappend (&ctx->sb, ");\n");
+          break;
+        default:
+          printf ("[INFO] ptr->type=%d\n", ptr->type);
+          CLOMY_FAIL ("Unreachable.");
           break;
         }
       ptr = ptr->next;
