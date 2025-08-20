@@ -1,17 +1,18 @@
 #include "clomy_test.h"
 #include "codegen.h"
 
-void _ident_prefix (cg *ctx);
-void _parse_exp (cg *ctx, ast_node *ptr);
-void _codegen_cc_parse (cg *ctx, ast_node *ptr);
-void _codegen_cc (cg *ctx, ast_node *ptr);
+static void _ident_prefix (cg *ctx);
+static void _parse_exp (cg *ctx, ast_node *ptr);
+static void _cc_parse (cg *ctx, ast_node *ptr);
+static void _load_libpas (cg *ctx);
 
 string *
 codegen (cg *ctx, ast_node *root)
 {
   dainit (&ctx->var_declares, &ctx->ar, 32, sizeof (ast_node *));
   sbinit (&ctx->sb, &ctx->ar);
-  _codegen_cc (ctx, root);
+  _load_libpas (ctx);
+  _cc_parse (ctx, root);
   return sbflush (&ctx->sb);
 }
 
@@ -72,7 +73,7 @@ _parse_exp (cg *ctx, ast_node *ptr)
 }
 
 void
-_codegen_cc_parse (cg *ctx, ast_node *ptr)
+_cc_parse (cg *ctx, ast_node *ptr)
 {
   ast_node *arg;
   ast_data_var_declare *var;
@@ -80,6 +81,7 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
   ast_data_cond *cond_data;
   ast_data_block *blk_data;
   ast_data_while *while_data;
+  ast_data_funcall *fun_data;
   char buf[32];
   int i;
 
@@ -95,7 +97,7 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
           _parse_exp (ctx, while_data->cond);
           sbappendch (&ctx->sb, ')');
           if (while_data->next)
-            _codegen_cc_parse (ctx, while_data->next);
+            _cc_parse (ctx, while_data->next);
           break;
         case AST_COND:
           cond_data = ptr->data;
@@ -103,17 +105,17 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
           _parse_exp (ctx, cond_data->cond);
           sbappendch (&ctx->sb, ')');
           if (cond_data->yes)
-            _codegen_cc_parse (ctx, cond_data->yes);
+            _cc_parse (ctx, cond_data->yes);
           if (cond_data->no)
             {
               sbappend (&ctx->sb, "else ");
-              _codegen_cc_parse (ctx, cond_data->no);
+              _cc_parse (ctx, cond_data->no);
             }
           break;
         case AST_BLOCK:
           blk_data = ptr->data;
           sbappend (&ctx->sb, "{\n");
-          _codegen_cc_parse (ctx, blk_data->next);
+          _cc_parse (ctx, blk_data->next);
           sbappend (&ctx->sb, "\n}");
           break;
         case AST_MAIN_BLOCK:
@@ -157,7 +159,7 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
               sbappend (&ctx->sb, ";\n");
             }
 
-          _codegen_cc_parse (ctx, blk_data->next);
+          _cc_parse (ctx, blk_data->next);
           sbappend (&ctx->sb, "return 0;\n");
           sbappend (&ctx->sb, "}\n");
           break;
@@ -188,18 +190,68 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
 
           break;
         case AST_FUNCALL:
-          _ident_prefix (ctx);
-          sbappend (&ctx->sb, ((ast_data_funcall *)ptr->data)->name->data);
-          sbappendch (&ctx->sb, '(');
-          arg = ((ast_data_funcall *)ptr->data)->args_head;
-          while (arg)
+          fun_data = ptr->data;
+
+          /* Handle writeln */
+          int is_writeln = strcmp (fun_data->name->data, "writeln");
+          int is_write = strcmp (fun_data->name->data, "write");
+
+          if (is_writeln == 0 || is_write == 0)
             {
-              _parse_exp (ctx, arg);
-              if (arg->next)
-                sbappendch (&ctx->sb, ',');
-              arg = arg->next;
+              arg = fun_data->args_head;
+              while (arg)
+                {
+                  _ident_prefix (ctx);
+
+                  int dtype = arg->type;
+                  if(dtype == AST_VAR_DECLARE) {
+                    dtype = ((ast_data_var_declare *)arg->data)->datatype;
+                  }
+
+                  switch (dtype)
+                    {
+                    case AST_STRLIT:
+                      sbappend (&ctx->sb, "__p_write_str(");
+                      break;
+                    case AST_INTLIT:
+                      sbappend (&ctx->sb, "__p_write_int(");
+                      break;
+                    case AST_FLOATLIT:
+                      sbappend (&ctx->sb, "__p_write_real(");
+                      break;
+                    default:
+                      printf ("[INFO] arg->type=%d\n", arg->type);
+                      CLOMY_FAIL ("Unreachable.");
+                      break;
+                    }
+
+                  _parse_exp (ctx, arg);
+                  sbappend (&ctx->sb, ");\n");
+
+                  arg = arg->next;
+                }
+
+              if (is_writeln == 0)
+                {
+                  _ident_prefix (ctx);
+                  sbappend (&ctx->sb, "__p_write_str(\"\\n\");\n");
+                }
             }
-          sbappend (&ctx->sb, ");\n");
+          else
+            {
+              _ident_prefix (ctx);
+              sbappend (&ctx->sb, fun_data->name->data);
+              sbappendch (&ctx->sb, '(');
+              arg = fun_data->args_head;
+              while (arg)
+                {
+                  _parse_exp (ctx, arg);
+                  if (arg->next)
+                    sbappendch (&ctx->sb, ',');
+                  arg = arg->next;
+                }
+              sbappend (&ctx->sb, ");\n");
+            }
           break;
         default:
           printf ("[INFO] ptr->type=%d\n", ptr->type);
@@ -211,18 +263,20 @@ _codegen_cc_parse (cg *ctx, ast_node *ptr)
 }
 
 void
-_codegen_cc (cg *ctx, ast_node *ptr)
+_load_libpas (cg *ctx)
 {
+  FILE *file;
+  char ch;
 
-  sbappend (&ctx->sb, "#include <stdio.h>\n");
-  sbappend (&ctx->sb, "#include <string.h>\n");
-  sbappend (&ctx->sb, "#include <stdarg.h>\n");
-  sbappend (&ctx->sb, "void _Pwriteln(const char *format, ...) {\n");
-  sbappend (&ctx->sb, "va_list args;\n");
-  sbappend (&ctx->sb, "va_start(args, format);\n");
-  sbappend (&ctx->sb, "vprintf(format, args);\n");
-  sbappend (&ctx->sb, "printf(\"\\n\");\n");
-  sbappend (&ctx->sb, "va_end(args);\n");
-  sbappend (&ctx->sb, "}\n");
-  _codegen_cc_parse (ctx, ptr);
+  file = fopen ("runtime/libpascal.c", "r");
+  if (!file)
+    {
+      fprintf (stderr, "Error: Failed to open libpascal.\n");
+      return;
+    }
+
+  while ((ch = fgetc (file)) != EOF)
+    sbappendch (&ctx->sb, ch);
+
+  fclose (file);
 }

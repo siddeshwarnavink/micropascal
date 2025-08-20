@@ -24,16 +24,14 @@ begin
   isTrue := false;
   isTrue := !isTrue;
 
-  writeln('%d', c);
-  writeln('%f', f);
+  writeln(c, ' ', f);
 
   name := 'John doe';
 
-  writeln(name);
+  writeln('Hello ', name);
 
   foo := name;
   name := 'Sid';
 
-  writeln(foo);
-  writeln(name);
+  writeln(foo, name);
 end.
