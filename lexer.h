@@ -39,9 +39,9 @@ struct lex
   string *str;
   double float_num;
   long int_num;
-  unsigned int line;
-  unsigned int col;
-  unsigned int pos;
+  U32 line;
+  U32 col;
+  U32 pos;
 };
 typedef struct lex lex;
 

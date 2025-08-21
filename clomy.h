@@ -35,28 +35,51 @@
 #define CLOMY_ALLOC_MAGIC 0x00636E6B
 #endif /* not CLOMY_ALLOC_MAGIC */
 
+#ifndef CLOMY_NULL
+#define CLOMY_NULL ((void *)0)
+#endif /* CLOMY_NULL */
+
+#ifndef CLOMY_true
+#define CLOMY_true 1
+#endif /* CLOMY_true */
+
+#ifndef CLOMY_false
+#define CLOMY_false 0
+#endif /* CLOMY_false */
+
+typedef unsigned char U8;
+typedef unsigned short U16;
+typedef unsigned int U32;
+typedef unsigned long U32l;
+typedef unsigned long long U64;
+
+typedef signed char S8;
+typedef signed short S16;
+typedef signed int S32;
+typedef signed long long S64;
+
 struct clomy_arfree_block
 {
-  unsigned int size;
+  U32 size;
   struct clomy_arfree_block *next;
 };
 typedef struct clomy_arfree_block clomy_arfree_block;
 
 struct clomy_archunk
 {
-  unsigned int size;
-  unsigned int capacity;
+  U32 size;
+  U32 capacity;
   clomy_arfree_block *free_list;
   struct clomy_archunk *next;
-  unsigned char data[];
+  U8 data[];
 };
 typedef struct clomy_archunk clomy_archunk;
 
 struct clomy_aralloc_hdr
 {
   struct clomy_archunk *cnk;
-  unsigned int size;
-  unsigned int magic;
+  U32 size;
+  U32 magic;
 };
 typedef struct clomy_aralloc_hdr clomy_aralloc_hdr;
 
@@ -66,10 +89,10 @@ struct clomy_arena
 };
 typedef struct clomy_arena clomy_arena;
 
-clomy_archunk *_clomy_newarchunk (unsigned int size);
+clomy_archunk *_clomy_newarchunk (U32 size);
 
 clomy_arfree_block *_clomy_find_free_block (clomy_archunk *cnk,
-                                            unsigned int needed_size,
+                                            U32 needed_size,
                                             clomy_arfree_block **prev_ptr);
 
 void _clomy_remove_free_block (clomy_archunk *cnk, clomy_arfree_block *block,
@@ -78,7 +101,7 @@ void _clomy_remove_free_block (clomy_archunk *cnk, clomy_arfree_block *block,
 void _clomy_add_free_block (clomy_archunk *cnk, clomy_arfree_block *new_block);
 
 /* Allocate memory inside arena. */
-void *clomy_aralloc (clomy_arena *ar, unsigned int size);
+void *clomy_aralloc (clomy_arena *ar, U32 size);
 
 /* Free the memory chunk inside arena. */
 void clomy_arfree (void *value);
@@ -96,27 +119,25 @@ struct clomy_da
   clomy_arena *ar;
   void *data;
   unsigned data_size;
-  unsigned int size;
-  unsigned int capacity;
+  U32 size;
+  U32 capacity;
 };
 typedef struct clomy_da clomy_da;
 
 /* Initialize the dynamic array in arena. */
-int clomy_dainit (clomy_da *da, clomy_arena *ar, unsigned int data_size,
-                  unsigned int capacity);
+int clomy_dainit (clomy_da *da, clomy_arena *ar, U32 data_size, U32 capacity);
 
 /* Initialize the dynamic array in heap.*/
-int clomy_dainit2 (clomy_da *da, unsigned int data_size,
-                   unsigned int capacity);
+int clomy_dainit2 (clomy_da *da, U32 data_size, U32 capacity);
 
 /* Set the capacity of dynamic array. */
-int clomy_dacap (clomy_da *da, unsigned int capacity);
+int clomy_dacap (clomy_da *da, U32 capacity);
 
 /* Doubles the capacity of the array. */
 int clomy_dagrow (clomy_da *da);
 
 /* Get Ith element of dynamic array. */
-void *clomy_dageti (clomy_da *da, unsigned int i);
+void *clomy_dageti (clomy_da *da, U32 i);
 
 /* Append data at the end of dynamic array. */
 int clomy_daappend (clomy_da *da, void *data);
@@ -125,16 +146,16 @@ int clomy_daappend (clomy_da *da, void *data);
 int clomy_dapush (clomy_da *da, void *data);
 
 /* Insert data at Ith position of dynamic array. */
-int clomy_dainsert (clomy_da *da, void *data, unsigned int i);
+int clomy_dainsert (clomy_da *da, void *data, U32 i);
 
 /* Delete data at Ith position of dynamic array. */
-void clomy_dadel (clomy_da *da, unsigned int i);
+void clomy_dadel (clomy_da *da, U32 i);
 
 /* Delete data at front of the dynamic array and returns the data. */
 void *clomy_dapop (clomy_da *da);
 
 /* Get Ith element of dynamic array. */
-void *clomy_dageti (clomy_da *da, unsigned int i);
+void *clomy_dageti (clomy_da *da, U32 i);
 
 /* Free the dynamic array. */
 void clomy_dafold (clomy_da *da);
@@ -145,7 +166,7 @@ struct clomy_htdata
 {
   int key;
   struct clomy_htdata *next;
-  unsigned char data[];
+  U8 data[];
 };
 typedef struct clomy_htdata clomy_htdata;
 
@@ -153,7 +174,7 @@ struct clomy_stdata
 {
   char *key;
   struct clomy_stdata *next;
-  unsigned char data[];
+  U8 data[];
 };
 typedef struct clomy_stdata clomy_stdata;
 
@@ -161,43 +182,42 @@ struct clomy_ht
 {
   clomy_arena *ar;
   void **data;
-  unsigned int data_size;
-  unsigned int size;
-  unsigned int capacity;
-  unsigned int a;
+  U32 data_size;
+  U32 size;
+  U32 capacity;
+  U32 a;
 };
 typedef struct clomy_ht clomy_ht;
 
-unsigned int _clomy_hash_int (clomy_ht *ht, unsigned int x);
+U32 _clomy_hash_int (clomy_ht *ht, U32 x);
 
-unsigned int _clomy_hash_str (clomy_ht *ht, char *x);
+U32 _clomy_hash_str (clomy_ht *ht, char *x);
 
-/* Initialize hash table with either unsigned integer or string key. */
-int clomy_htinit (clomy_ht *ht, clomy_arena *ar, unsigned int capacity,
-                  unsigned int dsize);
+/* Initialize hash table with either U32eger or string key. */
+int clomy_htinit (clomy_ht *ht, clomy_arena *ar, U32 capacity, U32 dsize);
 
-/* Initialize hash table with either unsigned integer or string key in heap. */
-int clomy_htinit2 (clomy_ht *ht, unsigned int capacity, unsigned int dsize);
+/* Initialize hash table with either U32eger or string key in heap. */
+int clomy_htinit2 (clomy_ht *ht, U32 capacity, U32 dsize);
 
-/* Put value in unsigned integer key in hash table. */
+/* Put value in U32eger key in hash table. */
 int clomy_htput (clomy_ht *ht, int key, void *value);
 
 /* Put value in string key in hash table. */
 int clomy_stput (clomy_ht *ht, char *key, void *value);
 
-/* Get value for unsigned integer key hash table. */
+/* Get value for U32eger key hash table. */
 void *clomy_htget (clomy_ht *ht, int key);
 
 /* Get value for string key hash table. */
 void *clomy_stget (clomy_ht *ht, char *key);
 
-/* Delete unsigned integer key from hash table. */
+/* Delete U32eger key from hash table. */
 void clomy_htdel (clomy_ht *ht, int key);
 
 /* Delete string key from hash table. */
 void clomy_stdel (clomy_ht *ht, char *key);
 
-/* Free the hash table with unsigned integer key. */
+/* Free the hash table with U32eger key. */
 void clomy_htfold (clomy_ht *ht);
 
 /* Free the hash table with string key. */
@@ -208,14 +228,14 @@ void clomy_stfold (clomy_ht *ht);
 struct clomy_string
 {
   char *data;
-  unsigned int size;
+  U32 size;
 };
 typedef struct clomy_string clomy_string;
 
 struct clomy_sbchunk
 {
-  unsigned int size;
-  unsigned int capacity;
+  U32 size;
+  U32 capacity;
   struct clomy_sbchunk *next;
   char data[];
 };
@@ -224,7 +244,7 @@ typedef struct clomy_sbchunk clomy_sbchunk;
 struct clomy_stringbuilder
 {
   clomy_arena *ar;
-  unsigned int size;
+  U32 size;
   clomy_sbchunk *head, *tail;
 };
 typedef struct clomy_stringbuilder clomy_stringbuilder;
@@ -245,7 +265,7 @@ int clomy_sbappend (clomy_stringbuilder *sb, char *val);
 int clomy_sbappendch (clomy_stringbuilder *sb, char val);
 
 /* Insert string at Ith position of string builder. */
-int clomy_sbinsert (clomy_stringbuilder *sb, char *val, unsigned int i);
+int clomy_sbinsert (clomy_stringbuilder *sb, char *val, U32 i);
 
 /* Push string to the beginning of string builder. */
 int clomy_sbpush (clomy_stringbuilder *sb, char *val);
@@ -268,6 +288,18 @@ void clomy_sbfold (clomy_stringbuilder *sb);
 /*----------------------------------------------------------------------*/
 
 #ifndef CLOMY_NO_SHORT_NAMES
+
+#ifndef NULL
+#define NULL CLOMY_NULL
+#endif /* not NULL */
+
+#ifndef true
+#define true CLOMY_true
+#endif /* not true */
+
+#ifndef false
+#define false CLOMY_false
+#endif /* not false */
 
 #define arena clomy_arena
 #define archunk clomy_archunk
@@ -322,26 +354,26 @@ void clomy_sbfold (clomy_stringbuilder *sb);
 #ifdef CLOMY_IMPLEMENTATION
 
 clomy_archunk *
-_clomy_newarchunk (unsigned int size)
+_clomy_newarchunk (U32 size)
 {
-  unsigned int cnksize = sizeof (clomy_archunk) + size;
+  U32 cnksize = sizeof (clomy_archunk) + size;
   clomy_archunk *cnk = (clomy_archunk *)malloc (cnksize);
   if (!cnk)
     return (clomy_archunk *)0;
 
   cnk->size = 0;
   cnk->capacity = size;
-  cnk->next = (void *)0;
-  cnk->free_list = (void *)0;
+  cnk->next = CLOMY_NULL;
+  cnk->free_list = CLOMY_NULL;
 
   return cnk;
 }
 
 clomy_arfree_block *
-_clomy_find_free_block (clomy_archunk *cnk, unsigned int needed_size,
+_clomy_find_free_block (clomy_archunk *cnk, U32 needed_size,
                         clomy_arfree_block **prev_ptr)
 {
-  clomy_arfree_block *prev = (void *)0;
+  clomy_arfree_block *prev = CLOMY_NULL;
   clomy_arfree_block *current = cnk->free_list;
 
   while (current)
@@ -357,8 +389,8 @@ _clomy_find_free_block (clomy_archunk *cnk, unsigned int needed_size,
     }
 
   if (prev_ptr)
-    *prev_ptr = (void *)0;
-  return (void *)0;
+    *prev_ptr = CLOMY_NULL;
+  return CLOMY_NULL;
 }
 
 void
@@ -374,7 +406,7 @@ _clomy_remove_free_block (clomy_archunk *cnk, clomy_arfree_block *block,
 void
 _clomy_add_free_block (clomy_archunk *cnk, clomy_arfree_block *new_block)
 {
-  clomy_arfree_block *prev = (void *)0;
+  clomy_arfree_block *prev = CLOMY_NULL;
   clomy_arfree_block *current = cnk->free_list;
 
   while (current && current < new_block)
@@ -403,13 +435,13 @@ _clomy_add_free_block (clomy_archunk *cnk, clomy_arfree_block *new_block)
 }
 
 void *
-clomy_aralloc (clomy_arena *ar, unsigned int size)
+clomy_aralloc (clomy_arena *ar, U32 size)
 {
   clomy_archunk *cnk;
   clomy_aralloc_hdr *hdr;
   clomy_arfree_block *free_blk, *prev_free, *rem;
-  unsigned int cnk_size;
-  const unsigned int hdr_size = CLOMY_ALIGN_UP (sizeof (clomy_aralloc_hdr), 8);
+  U32 cnk_size;
+  const U32 hdr_size = CLOMY_ALIGN_UP (sizeof (clomy_aralloc_hdr), 8);
 
   size = CLOMY_ALIGN_UP (size, 8);
 
@@ -418,7 +450,7 @@ clomy_aralloc (clomy_arena *ar, unsigned int size)
     {
       ar->head = _clomy_newarchunk (CLOMY_ARENA_CAPACITY);
       if (!ar->head)
-        return (void *)0;
+        return CLOMY_NULL;
 
       ar->tail = ar->head;
     }
@@ -468,7 +500,7 @@ clomy_aralloc (clomy_arena *ar, unsigned int size)
   cnk_size = cnk_size > CLOMY_ARENA_CAPACITY ? cnk_size : CLOMY_ARENA_CAPACITY;
   cnk = _clomy_newarchunk (cnk_size);
   if (!cnk)
-    return (void *)0;
+    return CLOMY_NULL;
 
   cnk->size = cnk_size;
 
@@ -489,7 +521,7 @@ clomy_arfree (void *value)
   clomy_archunk *cnk;
   clomy_aralloc_hdr *hdr;
   clomy_arfree_block *blk;
-  const unsigned int hdr_size = CLOMY_ALIGN_UP (sizeof (clomy_aralloc_hdr), 8);
+  const U32 hdr_size = CLOMY_ALIGN_UP (sizeof (clomy_aralloc_hdr), 8);
 
   if (!value)
     return;
@@ -505,7 +537,7 @@ clomy_arfree (void *value)
 
   blk = (clomy_arfree_block *)hdr;
   blk->size = hdr->size + hdr_size;
-  blk->next = (void *)0;
+  blk->next = CLOMY_NULL;
 
   _clomy_add_free_block (cnk, blk);
 }
@@ -521,15 +553,15 @@ clomy_arfold (clomy_arena *ar)
       cnk = next;
     }
 
-  ar->head = (void *)0;
-  ar->tail = (void *)0;
+  ar->head = CLOMY_NULL;
+  ar->tail = CLOMY_NULL;
 }
 
 void
 clomy_ardebug (clomy_arena *ar)
 {
   clomy_archunk *cnk = ar->head;
-  unsigned int chunk_num = 0;
+  U32 chunk_num = 0;
 
   printf ("----------------------------------------\n");
   printf ("Arena Debug Information:\n");
@@ -539,7 +571,7 @@ clomy_ardebug (clomy_arena *ar)
               cnk->capacity);
 
       clomy_arfree_block *free_block = cnk->free_list;
-      unsigned int free_num = 0;
+      U32 free_num = 0;
       while (free_block)
         {
           printf ("  Free block %u: size=%u, addr=%p\n", free_num,
@@ -557,8 +589,7 @@ clomy_ardebug (clomy_arena *ar)
 /*----------------------------------------------------------------------*/
 
 int
-clomy_dainit (clomy_da *da, clomy_arena *ar, unsigned int data_size,
-              unsigned int capacity)
+clomy_dainit (clomy_da *da, clomy_arena *ar, U32 data_size, U32 capacity)
 {
   da->ar = ar;
 
@@ -578,13 +609,13 @@ clomy_dainit (clomy_da *da, clomy_arena *ar, unsigned int data_size,
 }
 
 int
-clomy_dainit2 (clomy_da *da, unsigned int data_size, unsigned int capacity)
+clomy_dainit2 (clomy_da *da, U32 data_size, U32 capacity)
 {
-  return clomy_dainit (da, (void *)0, data_size, capacity);
+  return clomy_dainit (da, CLOMY_NULL, data_size, capacity);
 }
 
 int
-clomy_dacap (clomy_da *da, unsigned int capacity)
+clomy_dacap (clomy_da *da, U32 capacity)
 {
   void *newarr;
   if (da->ar)
@@ -612,7 +643,7 @@ clomy_dacap (clomy_da *da, unsigned int capacity)
 }
 
 void *
-clomy_dageti (clomy_da *da, unsigned int i)
+clomy_dageti (clomy_da *da, U32 i)
 {
   return da->data + i * da->data_size;
 }
@@ -652,7 +683,7 @@ clomy_dapush (clomy_da *da, void *data)
 }
 
 int
-clomy_dainsert (clomy_da *da, void *data, unsigned int i)
+clomy_dainsert (clomy_da *da, void *data, U32 i)
 {
   void *pos;
 
@@ -671,7 +702,7 @@ clomy_dainsert (clomy_da *da, void *data, unsigned int i)
 }
 
 void
-clomy_dadel (clomy_da *da, unsigned int i)
+clomy_dadel (clomy_da *da, U32 i)
 {
   void *pos = da->data + i * da->data_size;
   memmove (pos, pos + da->data_size,
@@ -703,23 +734,23 @@ clomy_dafold (clomy_da *da)
         clomy_arfree (da->data);
       else
         free (da->data);
-      da->data = (void *)0;
+      da->data = CLOMY_NULL;
     }
 }
 
 /*----------------------------------------------------------------------*/
 
-unsigned int
-_clomy_hash_int (clomy_ht *ht, unsigned int x)
+U32
+_clomy_hash_int (clomy_ht *ht, U32 x)
 {
-  unsigned int p = ht->a ^ x;
+  U32 p = ht->a ^ x;
   return p % ht->capacity;
 }
 
-unsigned int
+U32
 _clomy_hash_str (clomy_ht *ht, char *x)
 {
-  unsigned int hash = ht->a;
+  U32 hash = ht->a;
   int c;
 
   while ((c = *x++))
@@ -729,16 +760,15 @@ _clomy_hash_str (clomy_ht *ht, char *x)
 }
 
 int
-clomy_htinit (clomy_ht *ht, clomy_arena *ar, unsigned int capacity,
-              unsigned int dsize)
+clomy_htinit (clomy_ht *ht, clomy_arena *ar, U32 capacity, U32 dsize)
 {
-  unsigned int size;
+  U32 size;
 
   capacity = CLOMY_ALIGN_UP (capacity, 8);
   size = capacity * sizeof (clomy_htdata *);
 
   srand ((unsigned)time (NULL));
-  ht->a = ((unsigned int)rand () << 1) | 1;
+  ht->a = ((U32)rand () << 1) | 1;
 
   ht->ar = ar;
   ht->data_size = dsize;
@@ -759,17 +789,17 @@ clomy_htinit (clomy_ht *ht, clomy_arena *ar, unsigned int capacity,
 }
 
 int
-clomy_htinit2 (clomy_ht *ht, unsigned int capacity, unsigned int dsize)
+clomy_htinit2 (clomy_ht *ht, U32 capacity, U32 dsize)
 {
-  return clomy_htinit (ht, (void *)0, capacity, dsize);
+  return clomy_htinit (ht, CLOMY_NULL, capacity, dsize);
 }
 
 int
 clomy_htput (clomy_ht *ht, int key, void *value)
 {
   clomy_htdata *data;
-  unsigned int i = _clomy_hash_int (ht, key),
-               size = sizeof (clomy_htdata) + ht->data_size;
+  U32 i = _clomy_hash_int (ht, key),
+      size = sizeof (clomy_htdata) + ht->data_size;
 
   if (ht->ar)
     data = clomy_aralloc (ht->ar, size);
@@ -780,7 +810,7 @@ clomy_htput (clomy_ht *ht, int key, void *value)
     return 1;
 
   data->key = key;
-  data->next = (void *)0;
+  data->next = CLOMY_NULL;
   memcpy (data->data, value, ht->data_size);
 
   if (!ht->data[i])
@@ -801,9 +831,8 @@ int
 clomy_stput (clomy_ht *ht, char *key, void *value)
 {
   clomy_stdata *data;
-  unsigned int i = _clomy_hash_str (ht, key),
-               size = sizeof (clomy_stdata) + ht->data_size,
-               keylen = strlen (key);
+  U32 i = _clomy_hash_str (ht, key),
+      size = sizeof (clomy_stdata) + ht->data_size, keylen = strlen (key);
 
   if (ht->ar)
     data = clomy_aralloc (ht->ar, size);
@@ -822,7 +851,7 @@ clomy_stput (clomy_ht *ht, char *key, void *value)
     return 1;
 
   strcpy (data->key, key);
-  data->next = (void *)0;
+  data->next = CLOMY_NULL;
   memcpy (data->data, value, ht->data_size);
 
   if (!ht->data[i])
@@ -843,11 +872,11 @@ void *
 clomy_htget (clomy_ht *ht, int key)
 {
   clomy_htdata *ptr;
-  unsigned int i = _clomy_hash_int (ht, key);
+  U32 i = _clomy_hash_int (ht, key);
 
   ptr = ht->data[i];
   if (!ptr)
-    return (void *)0;
+    return CLOMY_NULL;
 
   while (ptr)
     {
@@ -856,7 +885,7 @@ clomy_htget (clomy_ht *ht, int key)
       ptr = ptr->next;
     }
 
-  return (void *)0;
+  return CLOMY_NULL;
 }
 
 void *
@@ -864,11 +893,11 @@ clomy_stget (clomy_ht *ht, char *key)
 {
   clomy_stdata *ptr;
 
-  unsigned int i = _clomy_hash_str (ht, key);
+  U32 i = _clomy_hash_str (ht, key);
 
   ptr = ht->data[i];
   if (!ptr)
-    return (void *)0;
+    return CLOMY_NULL;
 
   while (ptr)
     {
@@ -877,14 +906,14 @@ clomy_stget (clomy_ht *ht, char *key)
       ptr = ptr->next;
     }
 
-  return (void *)0;
+  return CLOMY_NULL;
 }
 
 void
 clomy_htdel (clomy_ht *ht, int key)
 {
-  clomy_htdata *ptr, *prev = (void *)0;
-  unsigned int i = _clomy_hash_int (ht, key);
+  clomy_htdata *ptr, *prev = CLOMY_NULL;
+  U32 i = _clomy_hash_int (ht, key);
 
   ptr = ht->data[i];
 
@@ -915,8 +944,8 @@ clomy_htdel (clomy_ht *ht, int key)
 void
 clomy_stdel (clomy_ht *ht, char *key)
 {
-  clomy_stdata *ptr, *prev = (void *)0;
-  unsigned int i = _clomy_hash_str (ht, key);
+  clomy_stdata *ptr, *prev = CLOMY_NULL;
+  U32 i = _clomy_hash_str (ht, key);
 
   ptr = ht->data[i];
 
@@ -939,7 +968,7 @@ clomy_stdel (clomy_ht *ht, char *key)
             }
 
           if (!prev)
-            ht->data[i] = (void *)0;
+            ht->data[i] = CLOMY_NULL;
 
           --ht->size;
           break;
@@ -954,7 +983,7 @@ void
 clomy_htfold (clomy_ht *ht)
 {
   clomy_htdata *ptr, *next;
-  unsigned int i;
+  U32 i;
 
   for (i = 0; i < ht->capacity; ++i)
     {
@@ -984,7 +1013,7 @@ void
 clomy_stfold (clomy_ht *ht)
 {
   clomy_stdata *ptr, *next;
-  unsigned int i;
+  U32 i;
 
   for (i = 0; i < ht->capacity; ++i)
     {
@@ -1019,10 +1048,10 @@ clomy_stfold (clomy_ht *ht)
 /*----------------------------------------------------------------------*/
 
 clomy_sbchunk *
-_clomy_newsbchunk (clomy_stringbuilder *sb, unsigned int capacity)
+_clomy_newsbchunk (clomy_stringbuilder *sb, U32 capacity)
 {
   clomy_sbchunk *cnk;
-  unsigned int cnksize = sizeof (clomy_sbchunk) + capacity;
+  U32 cnksize = sizeof (clomy_sbchunk) + capacity;
 
   if (sb->ar)
     cnk = (clomy_sbchunk *)clomy_aralloc (sb->ar, cnksize);
@@ -1030,11 +1059,11 @@ _clomy_newsbchunk (clomy_stringbuilder *sb, unsigned int capacity)
     cnk = (clomy_sbchunk *)malloc (cnksize);
 
   if (!cnk)
-    return (void *)0;
+    return CLOMY_NULL;
 
   cnk->size = 0;
   cnk->capacity = capacity;
-  cnk->next = (void *)0;
+  cnk->next = CLOMY_NULL;
   return cnk;
 }
 
@@ -1057,14 +1086,14 @@ clomy_sbinit (clomy_stringbuilder *sb, clomy_arena *ar)
 void
 clomy_sbinit2 (clomy_stringbuilder *sb)
 {
-  clomy_sbinit (sb, (void *)0);
+  clomy_sbinit (sb, CLOMY_NULL);
 }
 
 int
 clomy_sbappend (clomy_stringbuilder *sb, char *val)
 {
   clomy_sbchunk *ptr;
-  unsigned int i = 0, j = 0;
+  U32 i = 0, j = 0;
 
   if (!sb->head)
     {
@@ -1148,11 +1177,11 @@ clomy_sbappendch (clomy_stringbuilder *sb, char val)
 }
 
 int
-clomy_sbinsert (clomy_stringbuilder *sb, char *val, unsigned int i)
+clomy_sbinsert (clomy_stringbuilder *sb, char *val, U32 i)
 {
   clomy_sbchunk *ptr = sb->head, *prev, *cnk;
   int index = i;
-  unsigned int len = strlen (val), offset;
+  U32 len = strlen (val), offset;
 
   do
     {
@@ -1212,7 +1241,7 @@ int
 clomy_sbpush (clomy_stringbuilder *sb, char *val)
 {
   clomy_sbchunk *cnk;
-  unsigned int len = strlen (val);
+  U32 len = strlen (val);
 
   cnk = _clomy_newsbchunk (sb, len);
   if (!cnk)
@@ -1251,8 +1280,8 @@ clomy_sbpushch (clomy_stringbuilder *sb, char val)
 void
 clomy_sbrev (clomy_stringbuilder *sb)
 {
-  clomy_sbchunk *ptr = sb->head, *prev = (void *)0, *next;
-  unsigned int a, b;
+  clomy_sbchunk *ptr = sb->head, *prev = CLOMY_NULL, *next;
+  U32 a, b;
   char tmp;
 
   if (!ptr)
@@ -1287,7 +1316,7 @@ clomy_sbflush (clomy_stringbuilder *sb)
 {
   clomy_string *str;
   clomy_sbchunk *ptr = sb->head;
-  unsigned int size = sb->size + 1, i, j = 0;
+  U32 size = sb->size + 1, i, j = 0;
 
   if (!ptr)
     return (clomy_string *)0;
@@ -1351,8 +1380,8 @@ clomy_sbfold (clomy_stringbuilder *sb)
     }
 
   sb->size = 0;
-  sb->head = (void *)0;
-  sb->tail = (void *)0;
+  sb->head = CLOMY_NULL;
+  sb->tail = CLOMY_NULL;
 }
 
 #endif /* CLOMY_IMPLEMENTATION */

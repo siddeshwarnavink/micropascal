@@ -152,8 +152,8 @@ typedef struct ast_node ast_node;
 struct ast_data_var_declare
 {
   string *name;
-  unsigned short datatype;
-  unsigned long arsize;
+  U16 datatype;
+  U32l arsize;
 };
 typedef struct ast_data_var_declare ast_data_var_declare;
 
@@ -180,7 +180,7 @@ typedef struct ast_data_funcall ast_data_funcall;
 
 struct ast_data_op
 {
-  unsigned char op;
+  U8 op;
   void *left;
   void *right;
 };
@@ -206,13 +206,13 @@ struct ast
   arena ar;
   ht ident_table;
   ast_node *root;
-  unsigned short debug;
+  U16 debug;
 };
 typedef struct ast ast;
 
 void ast_print_tree (ast_node *root, char *delim);
 
-ast_node *ast_parse (ast *ctx, lex *lexer, unsigned short debug);
+ast_node *ast_parse (ast *ctx, lex *lexer, U16 debug);
 
 void *ast_parse_expression (ast *ctx, lex *lexer);
 

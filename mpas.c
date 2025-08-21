@@ -4,9 +4,9 @@
 #include "clomy.h"
 
 #include "codegen.h"
-//#include "ir.h"
+// #include "ir.h"
 
-int compiler_main (char *path, unsigned short debug, unsigned short target);
+int compiler_main (char *path, U16 debug, U16 target);
 
 void usage (char *prog);
 
@@ -14,7 +14,7 @@ int
 main (int argc, char **argv)
 {
   int i;
-  unsigned short rtarget = 0, target = TARGET_C, debug = 0;
+  U16 rtarget = 0, target = TARGET_C, debug = 0;
 
   if (argc > 1)
     {
@@ -69,7 +69,7 @@ main (int argc, char **argv)
 }
 
 int
-compiler_main (char *path, unsigned short debug, unsigned short target)
+compiler_main (char *path, U16 debug, U16 target)
 {
   lex lexer = { 0 };
   ast tree = { 0 };

@@ -51,7 +51,7 @@ _parse_exp (cg *ctx, ast_node *ptr)
       sbappend (&ctx->sb, buf);
       break;
     case AST_BOOL:
-      sprintf (buf, "%d", *((unsigned short *)ptr->data));
+      sprintf (buf, "%d", *((U16 *)ptr->data));
       sbappend (&ctx->sb, buf);
       break;
     case AST_FLOATLIT:
@@ -139,7 +139,7 @@ _cc_parse (cg *ctx, ast_node *ptr)
                   sbappend (&ctx->sb, "char");
                   break;
                 case AST_BOOL:
-                  sbappend (&ctx->sb, "unsigned short");
+                  sbappend (&ctx->sb, "U16");
                   break;
                 default:
                   continue;
@@ -204,9 +204,10 @@ _cc_parse (cg *ctx, ast_node *ptr)
                   _ident_prefix (ctx);
 
                   int dtype = arg->type;
-                  if(dtype == AST_VAR_DECLARE) {
-                    dtype = ((ast_data_var_declare *)arg->data)->datatype;
-                  }
+                  if (dtype == AST_VAR_DECLARE)
+                    {
+                      dtype = ((ast_data_var_declare *)arg->data)->datatype;
+                    }
 
                   switch (dtype)
                     {

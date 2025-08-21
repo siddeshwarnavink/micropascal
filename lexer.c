@@ -3,11 +3,11 @@
 
 #include "lexer.h"
 
-static unsigned int _is_whitespace (char ch);
+static U32 _is_whitespace (char ch);
 
-static unsigned int _is_symbol (char ch);
+static U32 _is_symbol (char ch);
 
-static unsigned int _is_digit (char ch);
+static U32 _is_digit (char ch);
 
 int
 lex_init (lex *ctx, char *path)
@@ -45,7 +45,7 @@ int
 lex_next_token (lex *ctx)
 {
   char *num;
-  unsigned short rcomment = 0, rstr = 0, rint = 0, rfloat = 0;
+  U16 rcomment = 0, rstr = 0, rint = 0, rfloat = 0;
 
   /* TODO: Add support for inline comment. */
 
@@ -180,9 +180,9 @@ lex_next_token (lex *ctx)
 int
 lex_peek (lex *ctx)
 {
-  unsigned int saved_pos = ctx->pos;
-  unsigned int saved_line = ctx->line;
-  unsigned int saved_col = ctx->col;
+  U32 saved_pos = ctx->pos;
+  U32 saved_line = ctx->line;
+  U32 saved_col = ctx->col;
   int next_token = lex_next_token (ctx);
 
   ctx->pos = saved_pos;
@@ -277,13 +277,13 @@ lex_fold (lex *ctx)
   arfold (&ctx->ar);
 }
 
-static unsigned int
+static U32
 _is_whitespace (char ch)
 {
   return ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r';
 }
 
-static unsigned int
+static U32
 _is_symbol (char ch)
 {
   return ch == ',' || ch == ':' || ch == '=' || ch == '.' || ch == '('
@@ -292,7 +292,7 @@ _is_symbol (char ch)
          || ch == ';' || ch == '\'' || ch == '!' || ch == '>' || ch == '<';
 }
 
-static unsigned int
+static U32
 _is_digit (char ch)
 {
   return ch >= '0' && ch <= '9';

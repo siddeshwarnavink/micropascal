@@ -3,7 +3,7 @@
 static int _get_precedence (char op);
 static ast_node *_ast_new_node (ast *ctx, short type);
 static ast_node *_create_op_node (ast *ctx, char op, da *value_stk);
-static void _ast_print_datatype (unsigned short dtype);
+static void _ast_print_datatype (U16 dtype);
 static void _ast_print_node (ast_node *n);
 static int _is_token_op (int tok);
 static int _is_expression_terminator (int tok);
@@ -38,7 +38,7 @@ ast_print_tree (ast_node *root, char *delim)
 /* TODO: We need to hava some sort of stack-based approach
    for handling loop to support nested loop. */
 ast_node *
-ast_parse (ast *ctx, lex *lexer, unsigned short debug)
+ast_parse (ast *ctx, lex *lexer, U16 debug)
 {
   da block_stk = { 0 }, cond_stk = { 0 };
   ast_node *new, *parent, *blk, *cond, *exp, *var, *loop = (void *)0;
@@ -50,9 +50,9 @@ ast_parse (ast *ctx, lex *lexer, unsigned short debug)
   ast_data_while *while_data;
   ast_data_block *blk_data;
   void *ptr;
-  unsigned int i;
+  U32 i;
   int token;
-  unsigned short found_entry = 0, rvar = 0;
+  U16 found_entry = 0, rvar = 0;
 
   ctx->debug = debug;
   dainit (&block_stk, &ctx->ar, 16, sizeof (ast_node *));
@@ -428,7 +428,7 @@ ast_parse_expression (ast *ctx, lex *lexer)
   void *ptr;
   int token, current_prec, top_prec;
   char current_op, top_op;
-  unsigned short *bool_data;
+  U16 *bool_data;
 
   dainit (&value_stk, &ctx->ar, sizeof (ast_node), 8);
   dainit (&op_stk, &ctx->ar, sizeof (char), 8);
@@ -479,7 +479,7 @@ ast_parse_expression (ast *ctx, lex *lexer)
                    || strcmp (lexer->str->data, "false") == 0)
             {
               new = _ast_new_node (ctx, AST_BOOL);
-              bool_data = aralloc (&ctx->ar, sizeof (unsigned short));
+              bool_data = aralloc (&ctx->ar, sizeof (U16));
               *bool_data = strcmp (lexer->str->data, "true") == 0 ? 1 : 0;
               new->data = bool_data;
               return new;
@@ -625,7 +625,7 @@ _create_op_node (ast *ctx, char op, da *value_stk)
 }
 
 static void
-_ast_print_datatype (unsigned short dtype)
+_ast_print_datatype (U16 dtype)
 {
   switch (dtype)
     {
@@ -728,7 +728,7 @@ _ast_print_node (ast_node *n)
       printf ("%ld", *(long *)n->data);
       break;
     case AST_BOOL:
-      printf ("%s", *((unsigned short *)n->data) == 1 ? "true" : "false");
+      printf ("%s", *((U16 *)n->data) == 1 ? "true" : "false");
       break;
     case AST_OP:
       op_data = n->data;
