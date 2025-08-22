@@ -3,11 +3,14 @@
 
 #include "lexer.h"
 
-static U32 _is_whitespace (char ch);
+/* Check if CH is a white space. */
+static U8 _is_whitespace (char ch);
 
-static U32 _is_symbol (char ch);
+/* Check if CH is known symbol or operator. */
+static U8 _is_symbol (char ch);
 
-static U32 _is_digit (char ch);
+/* Check if CH is a digit. */
+static U8 _is_digit (char ch);
 
 int
 lex_init (lex *ctx, char *path)
@@ -45,10 +48,9 @@ int
 lex_next_token (lex *ctx)
 {
   char *num;
-  U16 rcomment = 0, rstr = 0, rint = 0, rfloat = 0;
+  U8 flags = 0;
 
-  /* TODO: Add support for inline comment. */
-
+  /* Reset string buffer. */
   if (ctx->str && ctx->str->size > 0)
     {
       arfree (ctx->str->data);
@@ -59,17 +61,17 @@ lex_next_token (lex *ctx)
     {
       ++ctx->col;
 
-      if (rcomment)
+      /* Ignore block comment. */
+      if (flags & READ_BLOCK_COMMENT)
         {
           if (ctx->src->data[ctx->pos] == '}')
-            {
-              rcomment = 0;
-            }
+            flags &= ~READ_BLOCK_COMMENT;
           ++ctx->pos;
           continue;
         }
 
-      if (rstr)
+      /* Reading String literal. */
+      if (flags & READ_STR_LIT)
         {
           if (ctx->src->data[ctx->pos] != '\'')
             {
@@ -80,32 +82,34 @@ lex_next_token (lex *ctx)
             {
               ctx->str = sbflush (&ctx->sb);
               ++ctx->pos;
-              rstr = 0;
+              flags &= ~READ_STR_LIT;
               return TOKEN_STRLIT;
             }
         }
 
-      if (rint)
+      /* Reading Integer literal. */
+      if (flags & READ_INT_LIT)
         {
           if (_is_digit (ctx->src->data[ctx->pos]))
             {
               sbappendch (&ctx->sb, ctx->src->data[ctx->pos++]);
               continue;
             }
-          else if (!rfloat && ctx->src->data[ctx->pos] == '.')
+          else if (!(flags & READ_FLOAT_LIT)
+                   && ctx->src->data[ctx->pos] == '.')
             {
-              rfloat = 1;
+              flags |= READ_FLOAT_LIT;
               sbappendch (&ctx->sb, ctx->src->data[ctx->pos++]);
               continue;
             }
           else
             {
               num = sbflush (&ctx->sb)->data;
-              rint = 0;
+              flags &= ~READ_INT_LIT;
 
-              if (rfloat)
+              if (flags & READ_FLOAT_LIT)
                 {
-                  rfloat = 0;
+                  flags &= ~READ_FLOAT_LIT;
                   ctx->float_num = atof (num);
                   arfree (num);
                   return TOKEN_FLOATLIT;
@@ -117,6 +121,7 @@ lex_next_token (lex *ctx)
             }
         }
 
+      /* Skip whitespace. */
       if (_is_whitespace (ctx->src->data[ctx->pos]))
         {
 
@@ -129,20 +134,21 @@ lex_next_token (lex *ctx)
           ++ctx->pos;
           LEX_FLUSH_IDENTF ();
         }
+
       else if (_is_symbol (ctx->src->data[ctx->pos]))
         {
           LEX_FLUSH_IDENTF ();
 
-          if (!rstr && ctx->src->data[ctx->pos] == '\'')
+          if (!(flags & READ_STR_LIT) && ctx->src->data[ctx->pos] == '\'')
             {
-              rstr = 1;
+              flags |= READ_STR_LIT;
               ++ctx->pos;
               continue;
             }
 
           if (ctx->src->data[ctx->pos] == '{')
             {
-              rcomment = 1;
+              flags |= READ_BLOCK_COMMENT;
               continue;
             }
 
@@ -159,9 +165,9 @@ lex_next_token (lex *ctx)
         }
       else
         {
-          if (!rint && _is_digit (ctx->src->data[ctx->pos]))
+          if (!(flags & READ_INT_LIT) && _is_digit (ctx->src->data[ctx->pos]))
             {
-              rint = 1;
+              flags |= READ_INT_LIT;
               sbreset (&ctx->sb);
               sbappendch (&ctx->sb, ctx->src->data[ctx->pos++]);
               continue;
@@ -277,13 +283,13 @@ lex_fold (lex *ctx)
   arfold (&ctx->ar);
 }
 
-static U32
+static U8
 _is_whitespace (char ch)
 {
   return ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r';
 }
 
-static U32
+static U8
 _is_symbol (char ch)
 {
   return ch == ',' || ch == ':' || ch == '=' || ch == '.' || ch == '('
@@ -292,7 +298,7 @@ _is_symbol (char ch)
          || ch == ';' || ch == '\'' || ch == '!' || ch == '>' || ch == '<';
 }
 
-static U32
+static U8
 _is_digit (char ch)
 {
   return ch >= '0' && ch <= '9';

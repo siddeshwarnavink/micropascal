@@ -2,7 +2,15 @@
 #define LEXER_H
 
 #include "clomy.h"
+#include "utils.h"
 
+/* Lexer flags. */
+#define READ_BLOCK_COMMENT (1 << 0)
+#define READ_STR_LIT (1 << 1)
+#define READ_INT_LIT (1 << 2)
+#define READ_FLOAT_LIT (1 << 3)
+
+/* Handle operators which takes 2 characters. */
 #define LEX_HANDLE_OP(ctx, ch1, ch2, token)                                   \
   if ((ctx)->src->data[(ctx)->pos] == (ch1)                                   \
       && (ctx)->src->data[(ctx)->pos + 1] == (ch2))                           \
@@ -12,17 +20,18 @@
       return (token);                                                         \
     }
 
+/* Return known keywords. */
 #define LEX_FLUSH_IDENTF()                                                    \
   do                                                                          \
     {                                                                         \
       if (ctx->sb.size > 0)                                                   \
         {                                                                     \
           ctx->str = sbflush (&ctx->sb);                                      \
-          if (strcmp (ctx->str->data, "then") == 0)                           \
+          if (streq (ctx->str->data, "then"))                                 \
             return TOKEN_THEN;                                                \
-          else if (strcmp (ctx->str->data, "else") == 0)                      \
+          else if (streq (ctx->str->data, "else"))                            \
             return TOKEN_ELSE;                                                \
-          else if (strcmp (ctx->str->data, "do") == 0)                        \
+          else if (streq (ctx->str->data, "do"))                              \
             return TOKEN_DO;                                                  \
           return TOKEN_IDENTF;                                                \
         }                                                                     \
@@ -30,7 +39,7 @@
     }                                                                         \
   while (0);
 
-struct lex
+typedef struct lex
 {
   arena ar;
   stringbuilder sb;
@@ -42,8 +51,7 @@ struct lex
   U32 line;
   U32 col;
   U32 pos;
-};
-typedef struct lex lex;
+} lex;
 
 enum lex_token
 {
@@ -61,16 +69,22 @@ enum lex_token
   TOKEN_DO
 };
 
+/* Initialize the lexer. */
 int lex_init (lex *ctx, char *path);
 
+/* Move the lexer forward and get next token. */
 int lex_next_token (lex *ctx);
 
+/* Peek the next token without moving forward. */
 int lex_peek (lex *ctx);
 
+/* Print token in Human-friendly way. */
 void lex_print_token (lex *ctx, int tok);
 
+/* Report error at current lexer position. */
 void lex_error (lex *ctx, char *msg);
 
+/* Cleanup the lexer. */
 void lex_fold (lex *ctx);
 
 #endif /* not LEXER_H */
