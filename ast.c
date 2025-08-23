@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "utils.h"
 
 static int _get_precedence (char op);
 static ast_node *_ast_new_node (ast *ctx, short type);
@@ -43,27 +44,28 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
   da block_stk = { 0 }, cond_stk = { 0 };
   ast_node *new, *parent, *blk, *cond, *exp, *var, *loop = (void *)0;
   string *str_data, *str_data2;
-  ast_data_var_declare *vd_data;
-  ast_data_var_assign *va_data;
-  ast_data_funcall *funcall_data;
-  ast_data_cond *cond_data;
-  ast_data_while *while_data;
-  ast_data_block *blk_data;
   void *ptr;
   U32 i;
   int token;
-  U16 found_entry = 0, rvar = 0;
+  U8 flags = 0;
+
+  ast_data_var_declare *var_declare_data;
+  ast_data_var_assign *var_assign_data;
+  ast_data_funcall *funcall_data;
+  ast_data_cond *cond_data;
+  ast_data_while *while_data;
+  ast_data_block *block_data;
 
   ctx->debug = debug;
+  ctx->root = (void *)0;
+
   dainit (&block_stk, &ctx->ar, 16, sizeof (ast_node *));
   dainit (&cond_stk, &ctx->ar, 16, sizeof (ast_node *));
   htinit (&ctx->ident_table, &ctx->ar, 16, sizeof (ast_node *));
-  ctx->root = (void *)0;
 
   /* Program name. */
   token = lex_next_token (lexer);
-  AST_ERROR_IF (token != TOKEN_IDENTF
-                    || strcmp (lexer->str->data, "program") != 0,
+  AST_ERROR_IF (token != TOKEN_PROGRAM,
                 "Expected \"program\" statement at beginning of program.");
 
   token = lex_next_token (lexer);
@@ -80,8 +82,28 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
 
   while ((token = lex_next_token (lexer)) != TOKEN_END)
     {
+      if (cond_stk.size > 0)
+        {
+          // {{{ Handle end of condition.
+          cond_data = (*(ast_node **)dageti (&cond_stk, 0))->data;
+          AST_ERROR_IF (
+              !cond_data,
+              "Unreachable. Condition stack shouldn't have null pointer.");
+
+          /* Remove IF if it is completed. */
+          if (cond_data->yes && cond_data->no
+              && cond_data->no != (void *)0xDEADBEEF)
+            {
+              AST_LOG ("Getting rid of IF (else found).");
+              if (ctx->debug)
+                lex_print_token (lexer, token);
+              dadel (&cond_stk, 0);
+            }
+          // }}}
+        }
       if (token == TOKEN_ELSE)
         {
+          // {{{ Handle ELSE
           if (cond_stk.size == 0)
             AST_ERROR_IF (1, "Invalid usage of \"else\".");
 
@@ -97,69 +119,50 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
             ast_print_tree (cond, " ");
 
           continue;
+          // }}}
         }
-
-      if (cond_stk.size > 0)
+      if (token == TOKEN_VAR)
         {
-          cond_data = (*(ast_node **)dageti (&cond_stk, 0))->data;
-          AST_ERROR_IF (
-              !cond_data,
-              "Unreachable. Condition stack shouldn't have null pointer.");
-
-          /* Remove IF if it is completed. */
-          if (cond_data->yes && cond_data->no
-              && cond_data->no != (void *)0xDEADBEEF)
-            {
-              AST_LOG ("Getting rid of IF (else found).");
-              if (ctx->debug)
-                lex_print_token (lexer, token);
-              dadel (&cond_stk, 0);
-            }
-        }
-
-      /* Handle var. */
-      if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "var") == 0)
-        {
+          // {{{ Handle VAR
           AST_ERROR_IF (block_stk.size > 0,
                         "Variable declaration not allowed inside block.");
-          rvar = 1;
+          flags |= READ_VAR;
+          // }}}
         }
-
-      /* Handle block begin. */
-      else if (token == TOKEN_IDENTF
-               && strcmp (lexer->str->data, "begin") == 0)
+      else if (token == TOKEN_BEGIN)
         {
-          rvar = 0;
+          // {{{ Handle block BEGIN.
+          flags &= ~READ_VAR;
           new = _ast_new_node (ctx, AST_BLOCK);
           AST_LOG ("Block %p begin.", new);
-          blk_data = aralloc (&ctx->ar, sizeof (ast_data_block));
-          new->data = blk_data;
+          block_data = aralloc (&ctx->ar, sizeof (ast_data_block));
+          new->data = block_data;
 
           AST_APPEND_TO_BLOCK ();
-          blk_data->parent = parent;
+          block_data->parent = parent;
           dapush (&block_stk, &new);
           continue;
+          // }}}
         }
-
-      /* Handle block end. */
-      else if (token == TOKEN_IDENTF && strcmp (lexer->str->data, "end") == 0)
+      else if (token == TOKEN_BLOCK_END)
         {
+          // {{{ Handle block END.
           AST_ERROR_IF (block_stk.size == 0, "Invalid use of \"end\".");
           blk = *(ast_node **)dageti (&block_stk, 0);
           AST_LOG ("End of Block %p.", blk);
-          blk_data = blk->data;
-          blk_data->next = reverse_ast_list (blk_data->next);
+          block_data = blk->data;
+          block_data->next = reverse_ast_list (block_data->next);
 
           /* Check what's up with the parent. */
-          if (blk_data->parent)
+          if (block_data->parent)
             {
               AST_LOG ("End Block parent.");
               if (ctx->debug)
-                ast_print_tree (blk_data->parent, " ");
+                ast_print_tree (block_data->parent, " ");
 
-              if (blk_data->parent->type == AST_COND)
+              if (block_data->parent->type == AST_COND)
                 {
-                  cond_data = blk_data->parent->data;
+                  cond_data = block_data->parent->data;
                   if (cond_data->yes && !cond_data->no
                       && lex_peek (lexer) != TOKEN_ELSE)
                     {
@@ -172,7 +175,7 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
             }
 
           /* Remove all child conditions of the block. */
-          new = blk_data->next;
+          new = block_data->next;
           while (new)
             {
               if (new->type == AST_COND)
@@ -193,11 +196,11 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
             }
 
           dadel (&block_stk, 0);
+          // }}}
         }
-
-      /* Handle variable(s) declaration(s). */
-      else if (rvar && token == TOKEN_IDENTF)
+      else if ((flags & READ_VAR) && token == TOKEN_IDENTF)
         {
+          // {{{ Handle variable(s) declaration(s).
           str_data = stringcpy (&ctx->ar, lexer->str);
 
           token = lex_next_token (lexer);
@@ -209,20 +212,20 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
           str_data2 = stringcpy (&ctx->ar, lexer->str);
 
           new = _ast_new_node (ctx, AST_VAR_DECLARE);
-          vd_data = aralloc (&ctx->ar, sizeof (ast_data_var_declare));
-          vd_data->name = str_data;
-          new->data = vd_data;
+          var_declare_data = aralloc (&ctx->ar, sizeof (ast_data_var_declare));
+          var_declare_data->name = str_data;
+          new->data = var_declare_data;
 
-          if (strcmp (str_data2->data, "integer") == 0)
-            vd_data->datatype = AST_INTLIT;
-          else if (strcmp (str_data2->data, "real") == 0)
-            vd_data->datatype = AST_FLOATLIT;
-          else if (strcmp (str_data2->data, "string") == 0)
-            vd_data->datatype = AST_STRLIT;
-          else if (strcmp (str_data2->data, "boolean") == 0)
-            vd_data->datatype = AST_BOOL;
+          if (streq (str_data2->data, "integer"))
+            var_declare_data->datatype = AST_INTLIT;
+          else if (streq (str_data2->data, "real"))
+            var_declare_data->datatype = AST_FLOATLIT;
+          else if (streq (str_data2->data, "string"))
+            var_declare_data->datatype = AST_STRLIT;
+          else if (streq (str_data2->data, "boolean"))
+            var_declare_data->datatype = AST_BOOL;
           else
-            AST_ERROR_IF (1, "Unknown datatype.");
+            AST_ERROR_IF (true, "Unknown datatype.");
 
           token = lex_next_token (lexer);
           if (token == '[')
@@ -230,7 +233,7 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
               token = lex_next_token (lexer);
               AST_ERROR_IF (token != TOKEN_INTLIT,
                             "Expected integer for array size.");
-              vd_data->arsize = lexer->int_num;
+              var_declare_data->arsize = lexer->int_num;
 
               token = lex_next_token (lexer);
               AST_ERROR_IF (token != ']', "Expected ']'");
@@ -240,74 +243,78 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
 
           AST_EXPECT_SEMICOLON ();
 
-          stput (&ctx->ident_table, vd_data->name->data, &new);
+          stput (&ctx->ident_table, var_declare_data->name->data, &new);
 
-          if (strcmp (str_data2->data, "string") == 0 && vd_data->arsize < 1)
+          if (strcmp (str_data2->data, "string") == 0
+              && var_declare_data->arsize < 1)
             {
-              vd_data->arsize = 256;
+              var_declare_data->arsize = 256;
             }
 
           new->next = ctx->root;
           ctx->root = new;
+          // }}}
+        }
+      else if (token == TOKEN_WHILE)
+        {
+          // Handle WHILE {{{
+          AST_ERROR_IF (block_stk.size < 1,
+                        "WHILE should be used inside a block.");
+          new = _ast_new_node (ctx, AST_WHILE);
+          while_data = aralloc (&ctx->ar, sizeof (ast_data_while));
+          exp = ast_parse_expression (ctx, lexer);
+          if (exp)
+            {
+              while_data->cond = exp;
+              token = lex_next_token (lexer);
+              AST_ERROR_IF (token != TOKEN_DO, "Expected \"do\" after while.");
+            }
+          else
+            {
+              AST_ERROR_IF (true, "Expected condition expression.");
+            }
+
+          new->data = while_data;
+          AST_APPEND_TO_BLOCK ();
+          loop = new;
+          continue;
+          // }}}
+        }
+      else if (token == TOKEN_IF)
+        {
+          // Handle IF condition. {{{
+          AST_ERROR_IF (block_stk.size < 1,
+                        "IF should be used inside a block.");
+          new = _ast_new_node (ctx, AST_COND);
+          cond_data = aralloc (&ctx->ar, sizeof (ast_data_cond));
+          exp = ast_parse_expression (ctx, lexer);
+          if (exp)
+            {
+              cond_data->cond = exp;
+              token = lex_next_token (lexer);
+              AST_ERROR_IF (token != TOKEN_THEN,
+                            "Expected \"then\" after condition.");
+            }
+          else
+            {
+              AST_ERROR_IF (true,
+                            "Expected condition expression after \"if\".");
+            }
+
+          new->data = cond_data;
+          AST_APPEND_TO_BLOCK ();
+          dapush (&cond_stk, &new);
+          continue;
+          // }}}
         }
       else if (block_stk.size > 0 && token == TOKEN_IDENTF)
         {
           str_data = stringcpy (&ctx->ar, lexer->str);
-
-          /* WHILE loop */
-          if (strcmp (str_data->data, "while") == 0)
-            {
-              new = _ast_new_node (ctx, AST_WHILE);
-              while_data = aralloc (&ctx->ar, sizeof (ast_data_while));
-              exp = ast_parse_expression (ctx, lexer);
-              if (exp)
-                {
-                  while_data->cond = exp;
-                  token = lex_next_token (lexer);
-                  AST_ERROR_IF (token != TOKEN_DO,
-                                "Expected \"do\" after while.");
-                }
-              else
-                {
-                  AST_ERROR_IF (1, "Expected condition expression.");
-                }
-
-              new->data = while_data;
-              AST_APPEND_TO_BLOCK ();
-              loop = new;
-              continue;
-            }
-
-          /* IF condition */
-          else if (strcmp (str_data->data, "if") == 0)
-            {
-              new = _ast_new_node (ctx, AST_COND);
-              cond_data = aralloc (&ctx->ar, sizeof (ast_data_cond));
-              exp = ast_parse_expression (ctx, lexer);
-              if (exp)
-                {
-                  cond_data->cond = exp;
-                  token = lex_next_token (lexer);
-                  AST_ERROR_IF (token != TOKEN_THEN,
-                                "Expected \"then\" after condition.");
-                }
-              else
-                {
-                  AST_ERROR_IF (1,
-                                "Expected condition expression after \"if\".");
-                }
-
-              new->data = cond_data;
-              AST_APPEND_TO_BLOCK ();
-              dapush (&cond_stk, &new);
-              continue;
-            }
-
           token = lex_next_token (lexer);
 
-          /* Function call */
           if (token == '(')
             {
+              // Handle Function call {{{
               new = _ast_new_node (ctx, AST_FUNCALL);
               funcall_data = aralloc (&ctx->ar, sizeof (ast_data_funcall));
               funcall_data->name = str_data;
@@ -348,11 +355,12 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
               funcall_data->args_head
                   = reverse_ast_list (funcall_data->args_head);
               AST_APPEND_TO_BLOCK ();
+              // }}}
             }
-          /* Variable assignment. */
           else if ((ptr = stget (&ctx->ident_table, str_data->data))
                    != (void *)0)
             {
+              // Handle Variable assignment. {{{
               var = *((ast_node **)ptr);
 
               AST_ERROR_IF (var->type != AST_VAR_DECLARE,
@@ -360,8 +368,9 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
               AST_ERROR_IF (token != TOKEN_INFEQ, "Expected ':='");
 
               new = _ast_new_node (ctx, AST_VAR_ASSIGN);
-              va_data = aralloc (&ctx->ar, sizeof (ast_data_var_assign));
-              va_data->var = var;
+              var_assign_data
+                  = aralloc (&ctx->ar, sizeof (ast_data_var_assign));
+              var_assign_data->var = var;
 
               exp = ast_parse_expression (ctx, lexer);
               if (exp)
@@ -371,14 +380,15 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
 
                   /* TODO: Report error if datatype mismatch. */
 
-                  va_data->value = exp;
-                  new->data = va_data;
+                  var_assign_data->value = exp;
+                  new->data = var_assign_data;
                   AST_APPEND_TO_BLOCK ();
                 }
               else
                 {
                   goto ast_err_exit;
                 }
+              // }}}
             }
           else
             {
@@ -391,9 +401,9 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
             {
             /* Main block. */
             case '.':
-              if (!found_entry && ctx->root->type == AST_BLOCK)
+              if (!(flags & FOUND_ENTRY) && ctx->root->type == AST_BLOCK)
                 {
-                  found_entry = 1;
+                  flags |= FOUND_ENTRY;
                   ctx->root->type = AST_MAIN_BLOCK;
                 }
               break;
@@ -401,7 +411,7 @@ ast_parse (ast *ctx, lex *lexer, U16 debug)
         }
     }
 
-  AST_ERROR_IF (!found_entry, "Cannot find entry point.");
+  AST_ERROR_IF (!flags & FOUND_ENTRY, "Cannot find entry point.");
 
   if (ctx->root)
     ctx->root = reverse_ast_list (ctx->root);
@@ -653,10 +663,10 @@ _ast_print_node (ast_node *n)
   string *str_data;
   ast_data_op *op_data;
   ast_data_funcall *funcall_data;
-  ast_data_var_declare *vd_data;
-  ast_data_var_assign *va_data;
+  ast_data_var_declare *var_declare_data;
+  ast_data_var_assign *var_assign_data;
   ast_data_cond *cond_data;
-  ast_data_block *blk_data;
+  ast_data_block *block_data;
   ast_data_while *while_data;
 
   switch (n->type)
@@ -665,22 +675,22 @@ _ast_print_node (ast_node *n)
       printf ("(program %s)", ((string *)n->data)->data);
       break;
     case AST_VAR_ASSIGN:
-      va_data = n->data;
-      vd_data = va_data->var->data;
-      printf ("(var %s ", vd_data->name->data);
-      _ast_print_node (va_data->value);
+      var_assign_data = n->data;
+      var_declare_data = var_assign_data->var->data;
+      printf ("(var %s ", var_declare_data->name->data);
+      _ast_print_node (var_assign_data->value);
       printf (")");
       break;
     case AST_VAR_DECLARE:
-      vd_data = n->data;
-      printf ("(var %s ", vd_data->name->data);
-      _ast_print_datatype (vd_data->datatype);
+      var_declare_data = n->data;
+      printf ("(var %s ", var_declare_data->name->data);
+      _ast_print_datatype (var_declare_data->datatype);
       printf (")");
       break;
     case AST_MAIN_BLOCK:
-      blk_data = n->data;
+      block_data = n->data;
       printf ("(main-block\n  ");
-      ast_print_tree (blk_data->next, "\n  ");
+      ast_print_tree (block_data->next, "\n  ");
       printf (")");
       break;
     case AST_WHILE:
@@ -709,9 +719,9 @@ _ast_print_node (ast_node *n)
       printf (")");
       break;
     case AST_BLOCK:
-      blk_data = n->data;
+      block_data = n->data;
       printf ("(block\n  ");
-      ast_print_tree (blk_data->next, "\n  ");
+      ast_print_tree (block_data->next, "\n  ");
       printf (")");
       break;
     case AST_FUNCALL:

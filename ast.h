@@ -4,6 +4,10 @@
 #include "clomy_test.h"
 #include "lexer.h"
 
+/* AST flags. */
+#define FOUND_ENTRY (1 << 0)
+#define READ_VAR (1 << 1)
+
 /* Debug print */
 #define AST_LOG(format, ...)                                                  \
   do                                                                          \
@@ -47,9 +51,9 @@
                    && cond_data->yes->type == AST_BLOCK)                      \
             {                                                                 \
               AST_LOG ("Appending to condition NO branch.");                  \
-              blk_data = cond_data->no->data;                                 \
-              new->next = blk_data->next;                                     \
-              blk_data->next = new;                                           \
+              block_data = cond_data->no->data;                               \
+              new->next = block_data->next;                                   \
+              block_data->next = new;                                         \
             }                                                                 \
           /* Append to YES branch. */                                         \
           else if (!cond_data->yes)                                           \
@@ -61,9 +65,9 @@
           else if (cond_data->yes && cond_data->yes->type == AST_BLOCK)       \
             {                                                                 \
               AST_LOG ("Appending to condition YES block.");                  \
-              blk_data = cond_data->yes->data;                                \
-              new->next = blk_data->next;                                     \
-              blk_data->next = new;                                           \
+              block_data = cond_data->yes->data;                              \
+              new->next = block_data->next;                                   \
+              block_data->next = new;                                         \
             }                                                                 \
           else                                                                \
             {                                                                 \
@@ -77,9 +81,9 @@
           AST_LOG ("Appending to block %p.", parent);                         \
           if (parent)                                                         \
             {                                                                 \
-              blk_data = parent->data;                                        \
-              new->next = blk_data->next;                                     \
-              blk_data->next = new;                                           \
+              block_data = parent->data;                                      \
+              new->next = block_data->next;                                   \
+              block_data->next = new;                                         \
             }                                                                 \
           else                                                                \
             {                                                                 \

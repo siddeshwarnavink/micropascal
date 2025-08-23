@@ -27,12 +27,24 @@
       if (ctx->sb.size > 0)                                                   \
         {                                                                     \
           ctx->str = sbflush (&ctx->sb);                                      \
-          if (streq (ctx->str->data, "then"))                                 \
+          if (streq (ctx->str->data, "program"))                            \
+            return TOKEN_PROGRAM;                                                \
+          else if (streq (ctx->str->data, "then"))                                 \
             return TOKEN_THEN;                                                \
           else if (streq (ctx->str->data, "else"))                            \
             return TOKEN_ELSE;                                                \
           else if (streq (ctx->str->data, "do"))                              \
             return TOKEN_DO;                                                  \
+          else if (streq (ctx->str->data, "var"))                           \
+            return TOKEN_VAR;                                               \
+          else if (streq (ctx->str->data, "begin"))                           \
+            return TOKEN_BEGIN;                                               \
+          else if (streq (ctx->str->data, "end"))                             \
+            return TOKEN_BLOCK_END;                                           \
+          else if (streq (ctx->str->data, "while"))                           \
+            return TOKEN_WHILE;                                               \
+          else if (streq (ctx->str->data, "if"))                              \
+            return TOKEN_IF;                                                  \
           return TOKEN_IDENTF;                                                \
         }                                                                     \
       sbreset (&ctx->sb);                                                     \
@@ -64,9 +76,15 @@ enum lex_token
   TOKEN_GEQ,
   TOKEN_LEQ,
   TOKEN_NEQ,
+  TOKEN_PROGRAM,
   TOKEN_THEN,
   TOKEN_ELSE,
-  TOKEN_DO
+  TOKEN_DO,
+  TOKEN_VAR,
+  TOKEN_BEGIN,
+  TOKEN_BLOCK_END,
+  TOKEN_WHILE,
+  TOKEN_IF
 };
 
 /* Initialize the lexer. */
