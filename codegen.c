@@ -139,7 +139,7 @@ _cc_parse (cg *ctx, ast_node *ptr)
                   sbappend (&ctx->sb, "char");
                   break;
                 case AST_BOOL:
-                  sbappend (&ctx->sb, "U16");
+                  sbappend (&ctx->sb, "unsigned int");
                   break;
                 default:
                   continue;
@@ -198,6 +198,7 @@ _cc_parse (cg *ctx, ast_node *ptr)
 
           if (is_writeln == 0 || is_write == 0)
             {
+              sbappend (&ctx->sb, "{\n");
               arg = fun_data->args_head;
               while (arg)
                 {
@@ -237,6 +238,7 @@ _cc_parse (cg *ctx, ast_node *ptr)
                   _ident_prefix (ctx);
                   sbappend (&ctx->sb, "__p_write_str(\"\\n\");\n");
                 }
+              sbappend (&ctx->sb, "}\n");
             }
           else
             {

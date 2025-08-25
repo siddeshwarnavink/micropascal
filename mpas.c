@@ -4,9 +4,8 @@
 #include "clomy.h"
 
 #include "codegen.h"
-// #include "ir.h"
 
-int compiler_main (char *path, U16 debug, U16 target);
+int compiler_main (char *path, U8 debug, U8 target);
 
 void usage (char *prog);
 
@@ -14,7 +13,7 @@ int
 main (int argc, char **argv)
 {
   int i;
-  U16 rtarget = 0, target = TARGET_C, debug = 0;
+  U8 rtarget = 0, target = TARGET_C, debug = 0;
 
   if (argc > 1)
     {
@@ -69,7 +68,7 @@ main (int argc, char **argv)
 }
 
 int
-compiler_main (char *path, U16 debug, U16 target)
+compiler_main (char *path, U8 debug, U8 target)
 {
   lex lexer = { 0 };
   ast tree = { 0 };
@@ -81,9 +80,17 @@ compiler_main (char *path, U16 debug, U16 target)
   if (lex_init (&lexer, path) == 1)
     return 1;
 
-  root = ast_parse (&tree, &lexer, debug);
+  tree.lexer = &lexer;
+  if (debug)
+    tree.flags |= AST_FLAG_DEBUG;
+
+  if (ast_init (&tree) == 1)
+    return 1;
+  root = ast_parse (&tree);
+
   if (!root)
     {
+      fprintf (stderr, "Error: Failed to parse AST.\n");
       ast_fold (&tree);
       lex_fold (&lexer);
       return 1;
