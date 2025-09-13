@@ -450,7 +450,8 @@ _create_while (ast *ctx, void *args)
 
   new->data = data;
   _append_to_block (ctx, new);
-  ctx->loop = new;
+
+  dapush (ctx->loop_stk, new);
 
   return new;
 
@@ -489,17 +490,17 @@ ast_init (ast *ctx)
 {
   ctx->block_stk = aralloc (&ctx->ar, sizeof (da));
   ctx->cond_stk = aralloc (&ctx->ar, sizeof (da));
+  ctx->loop_stk = aralloc (&ctx->ar, sizeof (da));
   ctx->ident_table = aralloc (&ctx->ar, sizeof (ht));
 
   dainit (ctx->block_stk, &ctx->ar, 16, sizeof (ast_node *));
   dainit (ctx->cond_stk, &ctx->ar, 16, sizeof (ast_node *));
+  dainit (ctx->loop_stk, &ctx->ar, 16, sizeof (ast_node *));
   htinit (ctx->ident_table, &ctx->ar, 16, sizeof (ast_node *));
 
   return 0;
 }
 
-/* TODO: We need to hava some sort of stack-based approach
-   for handling loop to support nested loop. */
 ast_node *
 ast_parse (ast *ctx)
 {
@@ -841,13 +842,20 @@ _append_to_block (ast *ctx, ast_node *new)
       printf ("\n");
     }
   /* Append to WHILE loop. */
-  if (ctx->loop)
+  else if (ctx->loop_stk->size > 0)
     {
-      AST_LOG ("Appending to loop.");
-      while_data = ctx->loop->data;
-      while_data->next = new;
-      ctx->currentIndent = ctx->loop;
-      ctx->loop = NULL;
+      ctx->currentIndent = *(ast_node **)dageti (ctx->block_stk, 0);
+      AST_LOG ("Appending to loop %p.", ctx->currentIndent);
+      if (ctx->currentIndent)
+        {
+          while_data = ctx->currentIndent->data;
+          new->next = while_data->next;
+          while_data->next = new;
+        }
+      else
+        {
+          CLOMY_FAIL ("[AST] Block stack shouldn't contain null pointer.");
+        }
     }
   /* Append to IF condition. */
   else if (ctx->cond_stk->size > 0)

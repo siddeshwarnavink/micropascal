@@ -120,9 +120,9 @@ typedef struct
   lex *lexer;
   ast_node *root;
   ast_node *currentIndent;
-  ast_node *loop;
   da *block_stk;
   da *cond_stk;
+  da *loop_stk;
   ht *ident_table;
   U8 flags;
 } ast;
